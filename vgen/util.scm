@@ -10,16 +10,19 @@
 ;; util
 
 (define (vise-gensym type sym) 
-  (symbol->string 
-    (gensym 
-      (string-append 
-        (case type
-          ((arg) "a:")
-          ((script) "s:")
-          ((global) "g:")
-          (else ""))
-        (x->string sym)
-        "_"))))
+  (let1 prefix (case type
+                 ((arg) "a:")
+                 ((script) "s:")
+                 ((global) "g:")
+                 (else ""))
+    (if (string-null? prefix)
+      (symbol->string 
+        (gensym 
+          (string-append 
+            (x->string sym)
+            "_")))
+      (string-append prefix (x->string sym)))))
+
 
 (define (remove-symbol-prefix symbol)
   (string-scan (x->string symbol) ":" 'after))
