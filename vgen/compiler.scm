@@ -70,7 +70,7 @@
 ;;environment
 (define-class <env> ()
   (
-   (symbols :init-form (make-hash-table))
+   (symbols :init-value '())
    (children :init-value '())
    (parent :init-keyword :parent)
    )
@@ -92,16 +92,19 @@
 
 (define (env-add-symbol&exp env symbol type exp)
   (let1 symbol (get-symbol symbol)
-    (hash-table-put! (@ env.symbols) symbol
-                     (make <env-data>
-                           :exp exp
-                           :type type
-                           :vim-name (vise-gensym type symbol)))))
+    (@push! env.symbols 
+            (cons symbol (make <env-data>
+                               :exp exp
+                               :type type
+                               :vim-name (vise-gensym type symbol))))))
+
+(define (env-has-symbol? env symbol)
+  (boolean (assq-ref (@ env.symbols) (get-symbol symbol))))
 
 (define (env-find-data env symbol)
   (let1 symbol (get-symbol symbol)
     (let loop ((env env))
-      (let1 d (hash-table-get (@ env.symbols) symbol #f)
+      (let1 d (assq-ref (@ env.symbols) symbol)
         (or d (and (@ env.parent) (loop (@ env.parent))))))))
 
 (define (env-find-exp env symbol)
@@ -116,9 +119,9 @@
 
 (define (print-env-table env)
   (let loop ((env env))
-    (hash-table-for-each
-      (@ env.symbols)
-      (lambda (k v) (print k ":" v)))
+    (for-each
+      (lambda (item) (print (car item) ":" (cdr item)))
+      (@ env.symbols))
     (when (@ env.parent)
       (print "->")
       (loop (@ env.parent))))
