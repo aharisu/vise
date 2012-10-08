@@ -38,6 +38,12 @@
 
 (define vsymbol? (cut is-a? <> <vsymbol>))
 
+(define (get-symbol sym)
+  (cond 
+    [(vsymbol? sym) (@ sym.exp)]
+    [(symbol? sym) sym]
+    [else #f]))
+
 ;;
 ;;<vmacro>
 (define-class <vmacro> (<vexp>)
@@ -82,13 +88,10 @@
 (define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
 
 (define (env-add-symbol env symbol type)
-  (env-add-symbol&exp env symbol type (undefined)))
+  (env-add-symbol&exp env symbol type #f))
 
 (define (env-add-symbol&exp env symbol type exp)
-  (let1 symbol (cond
-                 [(symbol? symbol) symbol]
-                 [(vsymbol? symbol) (@ symbol.exp)]
-                 [else symbol])
+  (let1 symbol (get-symbol symbol)
     (hash-table-put! (@ env.symbols) symbol
                      (make <env-data>
                            :exp exp
@@ -96,10 +99,7 @@
                            :vim-name (vise-gensym type symbol)))))
 
 (define (env-find-data env symbol)
-  (let1 symbol (cond
-                 [(symbol? symbol) symbol]
-                 [(vsymbol? symbol) (@ symbol.exp)]
-                 [else symbol])
+  (let1 symbol (get-symbol symbol)
     (let loop ((env env))
       (let1 d (hash-table-get (@ env.symbols) symbol #f)
         (or d (and (@ env.parent) (loop (@ env.parent))))))))
@@ -108,6 +108,11 @@
   (if-let1 d (env-find-data env symbol)
     (@ d.exp)
     #f))
+
+(define (allow-rebound? vsymbol)
+  (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
+    (not (or (eq? (@ d.type) 'arg) (eq? (@ d.type) 'syntax)))
+    #t))
 
 (define (print-env-table env)
   (let loop ((env env))
@@ -171,6 +176,17 @@
        ,@body)
      (dec! (car (slot-ref (current-output-port) 'indent)))))
 
+;;
+;;set
+(define (set-exists set obj)
+  (any (pa$ equal? (if (is-a? obj <vexp>) (@ obj.exp) obj))
+       set))
+
+(define (set-cons set obj)
+  (if (set-exists set obj)
+    set
+    (cons obj set)))
+
 ;;----------
 ;;Compile
 ;;----------
@@ -186,11 +202,16 @@
   (vise-compile (open-input-string str)))
 
 (define (vise-compile in-port)
-  (let* ((out-port (make-vise-output-port (standard-output-port)))
+  (let* ((global-env (rlet1 env (make-env #f)
+                       (hash-table-for-each
+                         renderer-table
+                         (lambda (k v) (env-add-symbol&exp env k 'syntax v)))))
+         (out-port (make-vise-output-port (standard-output-port)))
          (exp-list ((.$
                       (pa$ vise-phase-render out-port)
                       ;check
-                      (pa$ vise-phase-expand (make-env #f))
+                      vise-phase-check
+                      (pa$ vise-phase-expand global-env)
                       vise-phase-load 
                       vise-phase-read)
                     in-port)))

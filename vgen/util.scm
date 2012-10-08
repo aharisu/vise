@@ -62,16 +62,4 @@
   `(@! ,expr (,op (@ ,expr) ,obj)))
 
 
-;;
-;;set
-
-(define (set-exists set obj)
-  (any (pa$ equal? (if (is-a? obj <vise-exp>) (@ obj.exp) obj))
-       set))
-
-(define (set-cons set obj)
-  (if (union-exists set obj)
-    set
-    (cons obj set)))
-
 

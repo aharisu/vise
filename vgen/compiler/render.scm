@@ -4,22 +4,15 @@
     (cut vise-render 'toplevel <> out-port)
     exp))
 
-(use gauche.interactive)
-
 (define (vise-render ctx exp :optional (out-port (current-output-port)))
   (with-output-to-port
     out-port
     (lambda ()
       (cond
         [(vsymbol? exp)
-         (display (slot-ref (env-find-data (@ exp.env) exp) 'vim-name))]
+         (display (get-vim-symbol exp))]
         [(list? exp)
-         (if-let1 renderer (cond
-                             [(vsymbol? (car exp)) 
-                              (vise-lookup-renderer (slot-ref (car exp) 'exp))]
-                             [(symbol? (car exp))
-                              (vise-lookup-renderer (car exp))]
-                             [else #f])
+         (if-let1 renderer (vise-lookup-renderer (car exp))
            (let1 ret (renderer exp ctx)
              (unless (undefined? ret) (vise-render ctx ret out-port)))
            (render-func-call ctx exp))]
@@ -27,14 +20,21 @@
           (display "literal:")
           (display exp)]))))
 
+(define (get-vim-symbol symbol)
+  (vise-render-identifier
+    (if-let1 d (env-find-data (@ symbol.env) symbol)
+      (@ d.vim-name)
+      (symbol->string (@ symbol.exp)))))
+
 (define (render-func-call ctx form)
   ;;TODO lambda
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (display "call "))
-  (display (car form))
+  (display (get-vim-symbol (car form)))
   (display (intersperse "," (map (pa$ vise-render-to-string 'expr) (cdr form))))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
+
 
 (define (vise-render-to-string ctx form)
   (let1 port (make-vise-output-port (open-output-string))
@@ -64,15 +64,22 @@
   (unless (or (toplevel-ctx? ctx) (stmt-ctx? ctx))
     (error "vise: form can only appear in toplevel or statment context:" form)))
 
+;;------------------------------------------------------------
+;; Renderer
 ;;
-;;renderer
 (define-constant renderer-table (make-hash-table 'eq?))
 
 (define (vise-register-renderer! name renderer)
   (hash-table-put! renderer-table name renderer))
 
-(define (vise-lookup-renderer name)
-  (hash-table-get renderer-table name #f))
+(define (vise-lookup-renderer sym)
+  (cond 
+    [(vsymbol? sym)
+     (if-let1 d (env-find-data (@ sym.env) sym)
+       (and (eq? (@ d.type) 'syntax) (@ d.exp))
+       #f)]
+    [(symbol? sym) (hash-table-get renderer-table sym #f)]
+    [else #f]))
 
 (define-syntax define-vise-renderer
   (syntax-rules ()
@@ -116,8 +123,7 @@
       (let ((sym (car vars))
             (init (cadr vars)))
         (display "let ")
-        (display (vise-render-identifier
-                   (slot-ref (env-find-data (@ sym.env) sym) 'vim-name)))
+        (display (get-vim-symbol sym))
         (display "=(")
         (vise-render 'expr init)
         (display ")")
@@ -300,7 +306,7 @@
                              [(#\!) (display #\X) (loop (read-char))]
                              [(#\<) (display "_LT") (loop (read-char))]
                              [(#\>) (display "_GT") (loop (read-char))]
-                             [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\= #\: #\. #\/ #\~)
+                             [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\= #\. #\/ #\~)
                               (display #\_)
                               (display (number->string (char->integer c) 16))
                               (loop (read-char))]

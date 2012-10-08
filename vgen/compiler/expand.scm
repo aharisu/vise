@@ -30,7 +30,9 @@
        [(let*) (expand-let* env exp)]
        [(dolist) ]
        [(while begin and or quasiquote unquote unquote-splicing)
-        (cons (car exp) (map (pa$ expand-expression env) (cdr exp)))]
+        (cons 
+          (make <vsymbol> :exp (car exp) :env env)
+          (map (pa$ expand-expression env) (cdr exp)))]
        [else (expand-apply env exp)])]
     [(symbol? exp)
      (rlet1 sym (make <vsymbol> 
@@ -98,7 +100,7 @@
   (let1 fn-env (make-env env)
     (append
       (list
-        (car exp) ;defun
+        (make <vsymbol> :exp (car exp) :env env) ;defun
         (if (symbol? (cadr exp)) ;name symbol
           (rlet1 sym (make <vsymbol> :exp (cadr exp) :env env)
             ;;TODO parse name
@@ -115,7 +117,7 @@
   (let1 lambda-env (make-env env)
     (append
       (list
-        (car exp) ;lambda
+        (make <vsymbol> :exp (car exp) :env env) ;lambda
         (constract-proc-args lambda-env (cadr exp))) ;args
       (map ;body
         (pa$ expand-expression lambda-env)
@@ -124,11 +126,11 @@
 (define (expand-if env exp)
   (match (cdr exp)
     [(pred then)
-     (list (car exp) ;if
+     (list (make <vsymbol> :exp (car exp) :env env) ;if
            (expand-expression env (cadr exp)) ;pred
            (expand-expression env (caddr exp)))] ;than
     [(pred then else)
-     (list (car exp) ;if
+     (list (make <vsymbol> :exp (car exp) :env env) ;if
            (expand-expression env (cadr exp)) ;pred
            (expand-expression env (caddr exp)) ;than
            (expand-expression env (cadddr exp)))] ;else
@@ -138,7 +140,7 @@
   (match (cdr exp)
     [(sym e)
      (list
-       (car exp) ;set!
+       (make <vsymbol> :exp (car exp) :env env) ;set!
        (if (symbol? sym) ;;symbol
          (rlet1 sym (make <vsymbol> :exp sym :env env)
            (if-let1 d (env-find-data env sym)
@@ -150,26 +152,28 @@
 (define (expand-let* env exp)
   (match exp
     [(_ vars . body)
-     (let1 let-env (make-env env)
-       (append
-         (list
-           (car exp) ;let*
-           (match vars
-             [((var . spec) ...)
-              (map
-                (lambda (var spec)
-                  (list
-                    (if (symbol? var)
-                      (rlet1 sym (make <vsymbol> :exp var :env let-env)
-                        ;;TODO context
-                        (env-add-symbol let-env sym 'local))
-                      var)
-                    (expand-expression let-env (car spec))))
-                var spec)]
-             [_ (error "invalid variable decls in let* form:" exp)]))
-         (map ;body
-           (pa$ expand-expression let-env)
-           (cddr exp))))]
+     (receive (vars env)
+       (let loop ((vars vars)
+                  (env (make-env env))
+                  (acc '()))
+         (if (null? vars)
+           (values (reverse! acc) env)
+           (loop (cdr vars)
+                 (make-env env)
+                 (cons
+                   (list
+                     (if (symbol? (caar vars))
+                       (rlet1 sym (make <vsymbol> :exp (caar vars) :env env)
+                         ;;TODO context
+                         (env-add-symbol env sym 'local))
+                       (caar vars))
+                     (expand-expression (@ env.parent) (cadar vars)))
+                   acc))))
+       `(,(make <vsymbol> :exp (car exp) :env env) ;let*
+          ,vars
+          ,@(map ;body
+              (pa$ expand-expression env)
+              (cddr exp))))]
     [_ (error "Bad let* syntax:" exp)]))
 
 (define (expand-apply env exp)
