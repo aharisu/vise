@@ -1,6 +1,7 @@
 
 (define-module vgen.compiler 
   (use gauche.vport)
+  (use gauche.parameter)
   (use util.match)
   (use srfi-13)
 
@@ -58,13 +59,51 @@
 ;;refer data
 (define-class <env-data> ()
   (
+   (symbol :init-keyword :symbol)
    (exp :init-keyword :exp)
-   (type :init-keyword :type)
-   (vim-name :init-keyword :vim-name)
+   (scope :init-keyword :scope)
+   (attr :init-value '())
+   (vim-name :init-value #f)
    (ref-count :init-value 0)
    (set-count :init-value 0)
    )
   )
+
+(define (env-data-attr-push! env-data attr)
+  (@! env-data.attr (set-cons (@ env-data.attr) attr)))
+
+(define (env-data-has-attr? env-data attr)
+  (set-exists (@ env-data.attr) attr))
+
+(define (get-vim-name env-data)
+  (if (@ env-data.vim-name)
+    (@ env-data.vim-name)
+    (rlet1 name (vise-gensym (@ env-data.symbol) (@ env-data.scope) (@ env-data.attr))
+      (@! env-data.vim-name name))))
+
+;;;;;
+;;@param scope {@ 'arg 'script 'global 'syntax}
+;;@param attr {@ 'free 'lambda 'func-call 'function}
+(define (vise-gensym sym scope attr) 
+  (let ((prefix (case scope
+                  ((arg) "a:")
+                  ((script) "s:")
+                  ((global) "g:")
+                  (else "")))
+        (sym (if (set-exists attr 'func-call)
+               (string-titlecase (x->string sym))
+               (x->string sym))))
+    (if (string-null? prefix)
+      (symbol->string 
+        (gensym 
+          (string-append 
+            sym
+            "_")))
+      (string-append prefix (x->string sym)))))
+
+
+(define (remove-symbol-prefix symbol)
+  (string-scan (x->string symbol) ":" 'after))
 
 ;;
 ;;environment
@@ -73,6 +112,7 @@
    (symbols :init-value '())
    (children :init-value '())
    (parent :init-keyword :parent)
+   (lambda-border? :init-keyword :lambda-border?)
    )
   )
 (define-method write-object ((env <env>) port)
@@ -80,32 +120,39 @@
     port
     (pa$ print-env-table env)))
 
-(define (make-env parent)
-  (rlet1 env (make <env> :parent parent)
+(define (make-env parent :optional (lambda-border? #f))
+  (rlet1 env (make <env> 
+                   :parent parent
+                   :lambda-border? lambda-border?)
     (when parent
       (@push! env.parent.children env))))
 
 (define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
 
-(define (env-add-symbol env symbol type)
-  (env-add-symbol&exp env symbol type #f))
+(define (env-add-symbol env symbol scope)
+  (env-add-symbol&exp env symbol scope #f))
 
-(define (env-add-symbol&exp env symbol type exp)
+(define (env-add-symbol&exp env symbol scope exp)
   (let1 symbol (get-symbol symbol)
     (@push! env.symbols 
             (cons symbol (make <env-data>
+                               :symbol symbol
                                :exp exp
-                               :type type
-                               :vim-name (vise-gensym type symbol))))))
+                               :scope scope)))))
 
-(define (env-has-symbol? env symbol)
-  (boolean (assq-ref (@ env.symbols) (get-symbol symbol))))
+(define (env-find-data-with-outside-lambda? env symbol)
+  (let1 symbol (get-symbol symbol)
+    (let loop ((env env)
+               (outside? #f))
+      (if-let1 d (assq-ref (@ env.symbols) symbol)
+        (values d outside?)
+        (if (@ env.parent)
+          (loop (@ env.parent) (or outside? (@ env.lambda-border?)))
+          (values #f #f))))))
 
 (define (env-find-data env symbol)
-  (let1 symbol (get-symbol symbol)
-    (let loop ((env env))
-      (let1 d (assq-ref (@ env.symbols) symbol)
-        (or d (and (@ env.parent) (loop (@ env.parent))))))))
+  (receive (d outside?) (env-find-data-with-outside-lambda? env symbol)
+    d))
 
 (define (env-find-exp env symbol)
   (if-let1 d (env-find-data env symbol)
@@ -114,7 +161,7 @@
 
 (define (allow-rebound? vsymbol)
   (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
-    (not (or (eq? (@ d.type) 'arg) (eq? (@ d.type) 'syntax)))
+    (not (or (eq? (@ d.scope) 'arg) (eq? (@ d.scope) 'syntax)))
     #t))
 
 (define (print-env-table env)
@@ -146,8 +193,8 @@
     (string-append 
       (if (rxmatch #/\n$/ prev) indent-str "")
       (regexp-replace #/\n +$/
-        (regexp-replace-all #/\n/ str (string-append "\n" indent-str))
-        "\n"))))
+                      (regexp-replace-all #/\n/ str (string-append "\n" indent-str))
+                      "\n"))))
 
 (define (make-vise-output-port port)
   (let ([prev (cons "" (undefined))]

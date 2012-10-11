@@ -34,12 +34,7 @@
           (make <vsymbol> :exp (car exp) :env env)
           (map (pa$ expand-expression env) (cdr exp)))]
        [else (expand-apply env exp)])]
-    [(symbol? exp)
-     (rlet1 sym (make <vsymbol> 
-                      :exp exp
-                      :env env)
-       (if-let1 d (env-find-data env sym)
-         (@inc! d.ref-count)))]
+    [(symbol? exp) (expand-refer-symbol env exp)]
     [else exp]))
 
 (define-syntax register-macro
@@ -104,7 +99,8 @@
         (if (symbol? (cadr exp)) ;name symbol
           (rlet1 sym (make <vsymbol> :exp (cadr exp) :env env)
             ;;TODO parse name
-            (env-add-symbol env sym 'script))
+            (env-add-symbol env sym 'script)
+            (env-data-attr-push! (env-find-data env sym) 'function))
           (cadr exp))
         (constract-proc-args fn-env (caddr exp))) ;args
       (map ;body
@@ -114,7 +110,7 @@
 (define (expand-lambda env exp)
   (when (< (length exp) 3)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
-  (let1 lambda-env (make-env env)
+  (let1 lambda-env (make-env env #t)
     (append
       (list
         (make <vsymbol> :exp (car exp) :env env) ;lambda
@@ -165,7 +161,12 @@
                      (if (symbol? (caar vars))
                        (rlet1 sym (make <vsymbol> :exp (caar vars) :env env)
                          ;;TODO context
-                         (env-add-symbol env sym 'local))
+                         (env-add-symbol 
+                           env sym 
+                           (if (and (list? (cadar vars))
+                                 (eq? (caadar vars) 'lambda))
+                             'lambda 
+                             'local)))
                        (caar vars))
                      (expand-expression (@ env.parent) (cadar vars)))
                    acc))))
@@ -183,4 +184,20 @@
       (expand-expression env ((@ e.exp) exp))
       ;;function call
       (map (pa$ expand-expression env) exp))))
+
+(define (expand-refer-symbol env exp)
+  (let1 sym (make <vsymbol> 
+                  :exp exp
+                  :env env)
+    (receive (d outside?) (env-find-data-with-outside-lambda? env sym)
+      (if d
+        (begin
+          (@inc! d.ref-count)
+          (if (and outside? (eq? (@ d.scope) 'local))
+            (begin 
+              (env-data-attr-push! d 'free)
+              (list 'ref-display-var sym))
+            sym))
+        sym))))
+
 

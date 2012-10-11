@@ -18,7 +18,7 @@
        [(defun) (check-defun nest-quasiquote exp)]
        [(defvar) ] ;;TODO
        ;;TODO
-       #;[(lambda) (check-lambda nest-quasiquote exp)]
+       [(lambda) (check-lambda nest-quasiquote exp)]
        [(if) (check-if nest-quasiquote exp)]
        [(set!) (check-set! nest-quasiquote exp)]
        [(let*) (check-let* nest-quasiquote exp)]
@@ -35,15 +35,12 @@
           (for-each
             (pa$ check-expression (- nest-quasiquote 1))
             (cdr exp)))]
-       [else ;function call
-         (for-each
-           (pa$ check-expression nest-quasiquote)
-           exp)])]
+       [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
      (errorf <vise-error> "Compiler: Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol)
-  ;;found from environment?
+  ;;not found from environment?
   (unless (env-find-data (@ vsymbol.env) vsymbol)
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
@@ -62,7 +59,7 @@
   (check-fun nest-quasiquote (caddr exp) (cdddr exp)))
 
 (define (check-lambda nest-quasiquote exp)
-  (check-fun nest-quasiquote (cdr exp) (cddr exp)))
+  (check-fun nest-quasiquote (cadr exp) (cddr exp)))
 
 (define (check-fun nest-quasiquote args body)
   (define (err msg related-exp)
@@ -169,4 +166,13 @@
 
   (qq-check (cdr exp) nest-level))
 
+(define (check-apply nest-level exp)
+  (for-each
+    (pa$ check-expression nest-level)
+    exp)
+  (when (vsymbol? (car exp))
+    (let1 d (env-find-data (slot-ref (car exp) 'env) (car exp))
+      (if (and d (not (or (eq? (@ d.scope) 'syntax)
+                        (env-data-has-attr? d 'function))))
+        (env-data-attr-push! d 'func-call)))))
 
