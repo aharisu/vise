@@ -56,7 +56,10 @@
 (define (check-defun nest-quasiquote exp)
   (unless (vsymbol? (cadr exp))
     (errorf <vise-error> "Illegal argument:~a" exp))
-  (check-fun nest-quasiquote (caddr exp) (cdddr exp)))
+  (let1 modify (cadddr exp)
+    (unless (or (eq? modify :normal) (eq? modify :dict) (eq? modify :range))
+      (errorf <vise-error> "Illegal function modifier:~a" modify)))
+  (check-fun nest-quasiquote (caddr exp) (cddddr exp)))
 
 (define (check-lambda nest-quasiquote exp)
   (check-fun nest-quasiquote (cadr exp) (cddr exp)))

@@ -90,6 +90,17 @@
       [else (errorf <vise-error> "Compiler: Illegal argument:~a" arg)])))
 
 (define (expand-defun env exp)
+  (define (parse-body fn-env body)
+    (if (null? body)
+      body
+      (receive (modify body) (if (keyword? (car body))
+                              (values (car body) (cdr body))
+                              (values :normal body))
+        (cons modify 
+              (map
+                (pa$ expand-expression fn-env)
+                body)))))
+
   (when (< (length exp) 4)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
   (let1 fn-env (make-env env)
@@ -103,9 +114,7 @@
             (env-data-attr-push! (env-find-data env sym) 'function))
           (cadr exp))
         (constract-proc-args fn-env (caddr exp))) ;args
-      (map ;body
-        (pa$ expand-expression fn-env)
-        (cdddr exp)))))
+      (parse-body fn-env (cdddr exp)))))  ;body
 
 (define (expand-lambda env exp)
   (when (< (length exp) 3)

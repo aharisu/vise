@@ -131,15 +131,23 @@
       $ map (lambda (sym) 
               (remove-symbol-prefix (get-vim-name (env-find-data (@ sym.env) sym))))
       args))
-  (define (gen-vfn name args body)
-    (print #`"function! ,(vim-symbol name) (,(gen-args args))")
+  (define (gen-vfn name args modify body)
+    (display "function! ")
+    (display (vim-symbol name))
+    (display "(")
+    (display (gen-args args))
+    (display ")")
+    (unless (eq? modify :normal)
+      (display modify))
+    (newline)
     (add-indent 
       (vise-render 'stmt `(begin ,@body)))
     (add-new-line)
     (print "endfunction"))
+
   (ensure-toplevel-ctx form ctx)
   (match form
-    [(_ name (args ...) . body) (gen-vfn name args body)]))
+    [(_ name (args ...) modify . body) (gen-vfn name args modify body)]))
 
 (define-vise-renderer (devar form ctx)
   (ensure-toplevel-ctx form ctx)
