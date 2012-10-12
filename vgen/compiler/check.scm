@@ -40,8 +40,14 @@
      (errorf <vise-error> "Compiler: Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol)
-  ;;not found from environment?
-  (unless (env-find-data (@ vsymbol.env) vsymbol)
+  (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
+    (cond
+      ((and (zero? (@ d.ref-count)) (zero? (@ d.set-count)))
+       (env-data-attr-push! d 'not-use))
+      ((zero? (@ d.ref-count))
+       (env-data-attr-push! d 'set-only))
+      ((zero? (@ d.set-count))
+       (env-data-attr-push! d 'ref-only)))
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
                 (char-upper-case? (string-ref symbol 0));global command?

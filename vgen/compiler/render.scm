@@ -43,10 +43,17 @@
 (define (vim-unboxing vim-symbol)
   (string-append vim-symbol "[0]"))
 
+(define (boxing? symbol)
+  (let1 d (env-find-data (@ symbol.env) symbol)
+    (and d 
+      (eq? (@ d.scope) 'local)
+      (env-data-has-attr? d 'free)
+      (not (or (env-data-has-attr? d 'ref-only) 
+             (env-data-has-attr? d 'not-use))))))
+
 (define (vim-ref-symbol symbol)
-  (let ((sym (vim-symbol symbol))
-        (d (env-find-data (@ symbol.env) symbol)))
-    (if (and d (env-data-has-attr? d 'free))
+  (let1 sym (vim-symbol symbol)
+    (if (boxing? symbol) 
       (vim-unboxing sym)
       sym)))
 
@@ -155,10 +162,9 @@
   )
 
 (define-vise-renderer (ref-display-var form ctx)
-  (display "self['")
-  (display (vim-symbol (cadr form)))
-  (display "'][0]"))
-
+  (display 
+    ((if (boxing? (cadr form)) vim-unboxing identity)
+     (string-append "self['" (vim-symbol (cadr form)) "']"))))
 
 (define-vise-renderer (lambda form ctx)
   (define (find-free exp vars)
@@ -221,9 +227,8 @@
         (display (vim-symbol sym))
         (display "=(")
         (display
-          (let ((init (vise-render-to-string 'expr init))
-                (d (env-find-data (@ sym.env) sym)))
-            (if (and d  (env-data-has-attr? d 'free))
+          (let1 init (vise-render-to-string 'expr init)
+            (if (boxing? sym)
               (vim-boxing init)
               init)))
         (display ")")
