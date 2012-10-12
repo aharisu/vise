@@ -22,8 +22,7 @@
         (unless (env-toplevel? env)
           (errorf <vise-error> "Compiler: defun can only be defined at top level:~a" exp))
         (expand-defun env exp)]
-       [(defvar)
-        ]
+       [(defvar) (expand-defvar env exp)]
        [(lambda) (expand-lambda env exp)]
        [(if) (expand-if env exp)]
        [(set!) (expand-set! env exp)]
@@ -89,13 +88,21 @@
            (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret))))))]
       [else (errorf <vise-error> "Compiler: Illegal argument:~a" arg)])))
 
+(define (parse-def-scope form)
+  (let1 scope (cadr form)
+    (if (keyword? scope)
+      (if (or (eq? scope :script) (eq? scope :global) (eq? scope :window) (eq? scope :buffer)) 
+        (values (string->symbol (keyword->string scope)) (caddr form) (cdddr form))
+        (errorf <vise-error> "Compiler: Illegal scope:~a ~a" scope form))
+      (values 'script scope (cddr form)))))
+
 (define (expand-defun env exp)
   (define (parse-body fn-env body)
     (if (null? body)
       body
       (receive (modify body) (if (keyword? (car body))
-                              (values (car body) (cdr body))
-                              (values :normal body))
+                               (values (car body) (cdr body))
+                               (values :normal body))
         (cons modify 
               (map
                 (pa$ expand-expression fn-env)
@@ -104,17 +111,33 @@
   (when (< (length exp) 4)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
   (let1 fn-env (make-env env)
-    (append
-      (list
-        (make <vsymbol> :exp (car exp) :env env) ;defun
-        (if (symbol? (cadr exp)) ;name symbol
-          (rlet1 sym (make <vsymbol> :exp (cadr exp) :env env)
-            ;;TODO parse name
-            (env-add-symbol env sym 'script)
-            (env-data-attr-push! (env-find-data env sym) 'function))
-          (cadr exp))
-        (constract-proc-args fn-env (caddr exp))) ;args
-      (parse-body fn-env (cdddr exp)))))  ;body
+    (receive (scope name rest) (parse-def-scope exp)
+      (when (< (length rest) 2)
+        (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
+      (append
+        (list
+          (make <vsymbol> :exp (car exp) :env env) ;defun
+          (if (symbol? name) ;name symbol
+            (rlet1 sym (make <vsymbol> :exp name :env env)
+              (env-add-symbol env sym scope)
+              (env-data-attr-push! (env-find-data env sym) 'function))
+            name)
+          (constract-proc-args fn-env (car rest))) ;args
+        (parse-body fn-env (cdr rest))))))  ;body
+
+(define (expand-defvar env exp)
+  (when (< (length exp) 3)
+    (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
+  (receive (scope name rest) (parse-def-scope exp)
+    (unless (= (length rest) 1)
+      (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
+    (list
+      (make <vsymbol> :exp (car exp) :env env) ;defvar
+      (if (symbol? name) ;;name symbol
+        (rlet1 sym (make <vsymbol> :exp name :env env)
+          (env-add-symbol env sym scope))
+        name)
+      (expand-expression env (car rest)))))
 
 (define (expand-lambda env exp)
   (when (< (length exp) 3)

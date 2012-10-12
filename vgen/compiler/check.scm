@@ -16,8 +16,7 @@
      (case (get-symbol (car exp))
        [(quote)] ;nothing
        [(defun) (check-defun nest-quasiquote exp)]
-       [(defvar) ] ;;TODO
-       ;;TODO
+       [(defvar) (check-defvar nest-quasiquote exp)]
        [(lambda) (check-lambda nest-quasiquote exp)]
        [(if) (check-if nest-quasiquote exp)]
        [(set!) (check-set! nest-quasiquote exp)]
@@ -66,6 +65,11 @@
     (unless (or (eq? modify :normal) (eq? modify :dict) (eq? modify :range))
       (errorf <vise-error> "Illegal function modifier:~a" modify)))
   (check-fun nest-quasiquote (caddr exp) (cddddr exp)))
+
+(define (check-defvar  nest-quasiquote exp)
+  (unless (vsymbol? (cadr exp))
+    (errorf <vise-error> "Illegal argument:~a" exp))
+  (check-expression nest-quasiquote (caddr exp)))
 
 (define (check-lambda nest-quasiquote exp)
   (check-fun nest-quasiquote (cadr exp) (cddr exp)))

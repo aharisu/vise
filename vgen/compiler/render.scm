@@ -156,10 +156,21 @@
   (match form
     [(_ name (args ...) modify . body) (gen-vfn name args modify body)]))
 
-(define-vise-renderer (devar form ctx)
-  (ensure-toplevel-ctx form ctx)
-  ;;TODO
-  )
+(define (render-symbol-bind sym init)
+        (display "let ")
+        (display (vim-symbol sym))
+        (display "=(")
+        (display
+          (let1 init (vise-render-to-string 'expr init)
+            (if (boxing? sym)
+              (vim-boxing init)
+              init)))
+        (display ")")
+        (add-new-line))
+
+(define-vise-renderer (defvar form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (render-symbol-bind (cadr form) (caddr form)))
 
 (define-vise-renderer (ref-display-var form ctx)
   (display 
@@ -221,18 +232,7 @@
   ;;render vars declare
   (for-each
     (lambda (vars)
-      (let ((sym (car vars))
-            (init (cadr vars)))
-        (display "let ")
-        (display (vim-symbol sym))
-        (display "=(")
-        (display
-          (let1 init (vise-render-to-string 'expr init)
-            (if (boxing? sym)
-              (vim-boxing init)
-              init)))
-        (display ")")
-        (add-new-line)))
+      (render-symbol-bind (car vars) (cadr vars)))
     (cadr form))
   ;;render body
   (vise-render 'stmt `(begin ,@(cddr form))))

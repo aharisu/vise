@@ -82,13 +82,15 @@
       (@! env-data.vim-name name))))
 
 ;;;;;
-;;@param scope {@ 'arg 'script 'global 'syntax}
-;;@param attr {@ 'free 'lambda 'func-call 'function}
+;;@param scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
+;;@param attr {@ set-list}
 (define (vise-gensym sym scope attr) 
   (let ((prefix (case scope
                   ((arg) "a:")
                   ((script) "s:")
                   ((global) "g:")
+                  ((window) "w:")
+                  ((buffer) "b:")
                   (else "")))
         (sym (if (set-exists attr 'func-call)
                (string-titlecase (x->string sym))
