@@ -27,7 +27,7 @@
        [(if) (expand-if env exp)]
        [(set!) (expand-set! env exp)]
        [(let*) (expand-let* env exp)]
-       [(dolist) ]
+       [(dolist) (expand-dolist env exp)]
        [(while begin and or quasiquote unquote unquote-splicing)
         (cons 
           (make <vsymbol> :exp (car exp) :env env)
@@ -195,6 +195,21 @@
          sym)
        (expand-expression env e))]
     [else (error <vise-error> "Compiler: Bad set! syntax:" exp)]))
+
+(define (expand-dolist env exp)
+  (match exp
+    [(_ (var expr) . body)
+     (let1 dolist-env (make-env env)
+       (append
+         (list
+           (make <vsymbol> :exp (car exp) :env env) ;dolist
+           (list
+             (expand-symbol-bind var expr 'local dolist-env)
+             (expand-expression env expr)))
+         (map
+           (pa$ expand-expression dolist-env)
+           body)))]
+    [else (errorf <vise-error> "Compiler: Bad syntax:~a" exp)]))
 
 (define (expand-let* env exp)
   (match exp

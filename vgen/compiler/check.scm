@@ -21,6 +21,7 @@
        [(if) (check-if nest-quasiquote exp)]
        [(set!) (check-set! nest-quasiquote exp)]
        [(let*) (check-let* nest-quasiquote exp)]
+       [(dolist) (check-dolist nest-quasiquote exp)]
        [(while begin and or)
         (for-each
           (pa$ check-expression nest-quasiquote)
@@ -126,6 +127,13 @@
       (errorf <vise-error> "It is '~a that Can not rebound: ~a" var exp))
     (check-expression nest-quasiquote var))
   (check-expression nest-quasiquote (caddr exp)))
+
+(define (check-dolist nest-quasiquote exp)
+  (check-symbol-bind (caadr exp) (cadadr exp)) ;var
+  (check-expression nest-quasiquote (cadadr exp)) ;expr
+  (for-each ;body
+    (pa$ check-expression nest-quasiquote)
+    (cddr exp)))
 
 (define (check-let* nest-quasiquote exp)
   ;;check declare
