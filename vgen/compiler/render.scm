@@ -332,6 +332,15 @@
      (display ")")]
     [_   (error "uneven args for set!:" form)]))
 
+(define-vise-renderer (echo form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (match form
+    [(_ expr)
+     (display "echo ")
+     (vise-render 'expr expr)]))
+
+
+
 ;;------------------------------------------------------------
 ;; Operators
 ;;
