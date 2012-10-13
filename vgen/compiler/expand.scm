@@ -125,6 +125,28 @@
           (constract-proc-args fn-env (car rest))) ;args
         (parse-body fn-env (cdr rest))))))  ;body
 
+(define (expand-symbol-bind sym init scope env)
+  (define (to-vsymbol sym)
+    (if (symbol? sym)
+      (rlet1 sym (make <vsymbol> :exp sym :env env)
+        (env-add-symbol env sym scope)
+        (when (and (list? init) (eq? (car init) 'lambda))
+          (env-data-attr-push! (env-find-data env sym) 'lambda)
+          scope))
+      sym))
+  (cond
+    ((symbol? sym) (to-vsymbol sym))
+    ((pair? sym)
+     (map
+       to-vsymbol
+       (if (list? sym)
+         sym
+         (let loop ((arg sym)
+                    (ret '()))
+           (if (pair? (cdr arg))
+             (loop (cdr arg) (cons (car arg) ret))
+             (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret)))))))))))
+
 (define (expand-defvar env exp)
   (when (< (length exp) 3)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
@@ -133,10 +155,7 @@
       (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
     (list
       (make <vsymbol> :exp (car exp) :env env) ;defvar
-      (if (symbol? name) ;;name symbol
-        (rlet1 sym (make <vsymbol> :exp name :env env)
-          (env-add-symbol env sym scope))
-        name)
+      (expand-symbol-bind name (car rest) scope env)
       (expand-expression env (car rest)))))
 
 (define (expand-lambda env exp)
@@ -190,16 +209,7 @@
                  (make-env env)
                  (cons
                    (list
-                     (if (symbol? (caar vars))
-                       (rlet1 sym (make <vsymbol> :exp (caar vars) :env env)
-                         ;;TODO context
-                         (env-add-symbol 
-                           env sym 
-                           (if (and (list? (cadar vars))
-                                 (eq? (caadar vars) 'lambda))
-                             'lambda 
-                             'local)))
-                       (caar vars))
+                     (expand-symbol-bind (caar vars) (cadar vars) 'local env)
                      (expand-expression (@ env.parent) (cadar vars)))
                    acc))))
        `(,(make <vsymbol> :exp (car exp) :env env) ;let*

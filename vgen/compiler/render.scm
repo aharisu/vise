@@ -44,7 +44,7 @@
   (string-append vim-symbol "[0]"))
 
 (define (boxing? symbol)
-  (let1 d (env-find-data (@ symbol.env) symbol)
+  (let1 d (and (vsymbol? symbol) (env-find-data (@ symbol.env) symbol))
     (and d 
       (eq? (@ d.scope) 'local)
       (env-data-has-attr? d 'free)
@@ -58,7 +58,6 @@
       sym)))
 
 (define (render-func-call ctx form)
-  ;;TODO lambda
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (display "call "))
   (display 
@@ -130,7 +129,6 @@
 ;; Syntax
 ;;
 
-;;TODO :dict modifier
 (define-vise-renderer (defun form ctx)
   (define (gen-args args)
     ($ (cut string-join <> ",")
@@ -157,16 +155,28 @@
     [(_ name (args ...) modify . body) (gen-vfn name args modify body)]))
 
 (define (render-symbol-bind sym init)
-        (display "let ")
-        (display (vim-symbol sym))
-        (display "=(")
-        (display
-          (let1 init (vise-render-to-string 'expr init)
-            (if (boxing? sym)
-              (vim-boxing init)
-              init)))
-        (display ")")
-        (add-new-line))
+  (display "let ")
+  (if (vsymbol? sym)
+    (display (vim-symbol sym))
+    (begin
+      (display "[")
+      (let loop ((sym sym))
+        (unless (null? sym)
+          (display (if (vsymbol? (car sym))
+                     (vim-symbol (car sym))
+                     ";"))
+          (when (not (or (null? (cdr sym)) (eq? (cadr sym) :rest) (eq? (car sym) :rest)))
+            (display ","))
+          (loop (cdr sym))))
+      (display "]")))
+  (display "=(")
+  (display
+    (let1 init (vise-render-to-string 'expr init)
+      (if (boxing? sym)
+        (vim-boxing init)
+        init)))
+  (display ")")
+  (add-new-line))
 
 (define-vise-renderer (defvar form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)

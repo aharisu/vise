@@ -66,9 +66,23 @@
       (errorf <vise-error> "Illegal function modifier:~a" modify)))
   (check-fun nest-quasiquote (caddr exp) (cddddr exp)))
 
+(define (check-symbol-bind sym form)
+  (cond
+    ((list? sym)
+     (let loop ((sym sym))
+       (unless (null? sym)
+         (cond
+           ((eq? (car sym) :rest)
+            (unless (and (not (null? (cdr sym))) (null? (cddr sym)))
+              (errorf <vise-error> "Illegal :rest argument:~a ~a" (car sym) form)))
+           ((not (vsymbol? (car sym))) 
+            (errorf <vise-error> "Illegal argument:~a ~a" (car sym) form)))
+         (loop (cdr sym)))))
+    ((not (vsymbol? sym))
+     (errorf <vise-error> "Illegal argument:~a ~a" sym form))))
+
 (define (check-defvar  nest-quasiquote exp)
-  (unless (vsymbol? (cadr exp))
-    (errorf <vise-error> "Illegal argument:~a" exp))
+  (check-symbol-bind (cadr exp) exp)
   (check-expression nest-quasiquote (caddr exp)))
 
 (define (check-lambda nest-quasiquote exp)
@@ -117,8 +131,7 @@
   ;;check declare
   (for-each
     (lambda (spec)
-      (unless (vsymbol? (car spec))
-        (errorf <vise-error> "Illegal variable. Must be a symbol: ~a" spec))
+      (check-symbol-bind (car spec) exp)
       (check-expression nest-quasiquote (cadr spec)))
     (cadr exp))
   ;;check body
