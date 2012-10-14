@@ -26,6 +26,9 @@
         (for-each
           (pa$ check-expression nest-quasiquote)
           (cdr exp))]
+       [(list-func)
+        (check-expression nest-quasiquote (caddr exp))
+        (check-expression nest-quasiquote (cadddr exp))]
        ;;TODO
        #;[(quasiquote) (check-quasiquote nest-quasiquote exp)]
        ;;TODO
@@ -54,6 +57,7 @@
                 (and (< 1 (string-length symbol)) ;global or window or buffer scope?
                   (let1 prefix (substring symbol 0 2)
                     (or (string=? "g:" prefix)
+                      (string=? "v:" prefix)
                       (string=? "w:" prefix)
                       (string=? "b:" prefix))))
                 (string-scan symbol #\#)) ;refer name space?

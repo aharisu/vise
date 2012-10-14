@@ -32,6 +32,12 @@
         (cons 
           (make <vsymbol> :exp (car exp) :env env)
           (map (pa$ expand-expression env) (cdr exp)))]
+       [(list-func)
+        (list
+          (make <vsymbol> :exp (car exp) :env env)
+          (cadr exp) ;keyword
+          (expand-expression env (caddr exp))
+          (expand-expression env (cadddr exp)))]
        [else (expand-apply env exp)])]
     [(symbol? exp) (expand-refer-symbol env exp)]
     [else exp]))
@@ -58,16 +64,64 @@
     [(_ env op (arg ...) . body)
      (register-macro env (op arg ...) . body)]))
 
+(define (check-lambda-for-list-fnction form proc . require-args)
+  (if (and (list? proc) (eq? (car proc) 'lambda))
+    (match proc
+      [(_ args . body)
+       (if (and (list? args) (any (pa$ = (length args)) require-args))
+         #t
+         (errorf <vise-error> "Compiler: Bad syntax:~a ~a" proc form))]
+      [else (errorf <vise-error> "Compiler: Bad syntax:~a ~a" proc form)])
+    #f))
+
+(define (is-expand-lambda-body? proc)
+  (and (= 1 (length (cddr proc)))
+    (list? (caddr proc))
+    (not (or* eq? (caaddr proc)
+              'lambda 'if 'set! 'let* 'dolist 'while 'begin
+              'quasiquote 'unquote 'unquote-splicing 'list-func))))
+
+(define (replace-symbol sym-from sym-to body)
+  (cond
+    ((list? body) (map (pa$ replace-symbol sym-from sym-to) body))
+    ((symbol? body) (if (eq? sym-from body) sym-to body))
+    (else body)))
+
 (define (init-phase-expand env)
   ;;add global macro
+  ;;when
   (register-macro 
     env
     (when test . body)
     `(if ,test (begin ,@body)))
+  ;;unless
   (register-macro 
     env
     (unless test . body)
     `(if (not ,test) (begin ,@body)))
+  ;;map
+  (register-macro
+    env
+    (map proc l)
+    (if (check-lambda-for-list-fnction `(map ,proc ,l) proc 1 2)
+      (if (is-expand-lambda-body? proc)
+        `(list-func 
+           :map ,l 
+           ,@(if (= 1 (length (cadr proc)))
+               (replace-symbol (caadr proc) 'v:val (cddr proc))
+               ((.$
+                  (pa$ replace-symbol (cadadr proc) 'v:val)
+                  (pa$ replace-symbol (caadr proc) 'v:key))
+                (cddr proc))))
+        `(list-func :map ,l ,proc))
+      `(list-func :map ,l (,proc v:val))))
+  ;;for-each
+  (register-macro 
+    env
+    (for-each proc l)
+    (if (check-lambda-for-list-fnction `(for-each ,proc ,l) proc 1 2)
+      `(dolist (,(caadr proc) ,l) ,@(cddr proc))
+      `(dolist (val ,l) (,proc val))))
   )
 
 (define (constract-proc-args proc-env arg)
@@ -243,18 +297,13 @@
       (map (pa$ expand-expression env) exp))))
 
 (define (expand-refer-symbol env exp)
-  (let1 sym (make <vsymbol> 
+  (rlet1 sym (make <vsymbol> 
                   :exp exp
                   :env env)
     (receive (d outside?) (env-find-data-with-outside-lambda? env sym)
-      (if d
-        (begin
-          (@inc! d.ref-count)
-          (if (and outside? (eq? (@ d.scope) 'local))
-            (begin 
-              (env-data-attr-push! d 'free)
-              (list 'ref-display-var sym))
-            sym))
-        sym))))
+      (when d
+        (@inc! d.ref-count)
+        (when (and outside? (eq? (@ d.scope) 'local))
+          (env-data-attr-push! d 'free))))))
 
 

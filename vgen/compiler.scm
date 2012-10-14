@@ -3,6 +3,7 @@
   (use gauche.vport)
   (use gauche.parameter)
   (use util.match)
+  (use srfi-1)
   (use srfi-13)
 
   (use vgen.util)
@@ -28,6 +29,11 @@
 
 (define-method write-object ((sym <vexp>) port)
   (format port "~a" (@ sym.exp)))
+
+(define (vexp o)
+  (if (is-a? o <vexp>)
+    (@ o.exp)
+    o))
 
 ;;
 ;; <vsymbol>
@@ -55,8 +61,9 @@
 
 (define vmacro? (cut is-a? <> <vmacro>))
 
-;;
+;;;;;
 ;;refer data
+;;@slot scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
 (define-class <env-data> ()
   (
    (symbol :init-keyword :symbol)
@@ -71,6 +78,9 @@
 
 (define (env-data-attr-push! env-data attr)
   (@! env-data.attr (set-cons (@ env-data.attr) attr)))
+
+(define (env-data-attr-remove! env-data attr)
+  (@! env-data.attr (remove! (pa$ equal? attr) (@ env-data.attr))))
 
 (define (env-data-has-attr? env-data attr)
   (set-exists (@ env-data.attr) attr))
@@ -105,7 +115,9 @@
 
 
 (define (remove-symbol-prefix symbol)
-  (string-scan (x->string symbol) ":" 'after))
+  (if-let1 ret (string-scan (x->string symbol) ":" 'after)
+    ret
+    symbol))
 
 ;;
 ;;environment

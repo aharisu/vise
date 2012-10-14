@@ -47,4 +47,7 @@
   `(@! ,expr (,op (@ ,expr) ,obj)))
 
 
-
+(define-macro (or* test x . any)
+  (let1 x-sym (gensym)
+    `(let1 ,x-sym ,x
+       (or ,@(map (lambda (y) `(,test ,x-sym ,y)) any)))))

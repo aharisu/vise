@@ -53,9 +53,15 @@
 
 (define (vim-ref-symbol symbol)
   (let1 sym (vim-symbol symbol)
-    (if (boxing? symbol) 
-      (vim-unboxing sym)
-      sym)))
+    (receive (d outside?) (if (vsymbol? symbol)
+                            (env-find-data-with-outside-lambda? (@ symbol.env) symbol)
+                            (values #f #f))
+      (let1 sym (if (and d outside? (eq? (@ d.scope) 'local))
+                  (string-append "self['" sym "']")
+                  sym)
+        (if (boxing? symbol) 
+          (vim-unboxing sym)
+          sym)))))
 
 (define (render-func-call ctx form)
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
@@ -63,7 +69,8 @@
   (display 
     (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
           (sym (vim-symbol (car form)))
-          (d (env-find-data (slot-ref (car form) 'env) (car form))))
+          (d (and (vsymbol? (car form))
+               (env-find-data (slot-ref (car form) 'env) (car form)))))
       (cond
         ((or (not d) (env-data-has-attr? d 'function)) (string-append sym params))
         ((env-data-has-attr? d 'lambda) (string-append sym ".func" params))
@@ -182,43 +189,40 @@
   (ensure-stmt-or-toplevel-ctx form ctx)
   (render-symbol-bind (cadr form) (caddr form)))
 
-(define-vise-renderer (ref-display-var form ctx)
-  (display 
-    ((if (boxing? (cadr form)) vim-unboxing identity)
-     (string-append "self['" (vim-symbol (cadr form)) "']"))))
-
-(define-vise-renderer (lambda form ctx)
-  (define (find-free exp vars)
+(define (find-free found-action exp vars)
+  (define (find exp vars)
     (cond
-      ((symbol? exp) vars)
-      ((vsymbol? exp)
+      [(vsymbol? exp)
        (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
          (if (and d (env-data-has-attr? d 'free) outside?)
-           (set-cons vars exp)
-           vars)))
-      (else
-        (case (and (list? exp) (get-symbol (car exp)))
-          ((quote) vars)
-          ((lambda) ) ;;TODO
-          ((if)
-           (if (null? (cdddr exp))
-             ($ find-free (cadr exp) ;test
-               $ find-free (caddr exp)  ;then
-               vars)
-             ($ find-free (cadr exp) ;test
-               $ find-free (caddr exp) ;then
-               $ find-free (cadddr exp) ;else
-               vars))) ;else
-          ((set!)
-           ($ find-free (cadr exp)
-             $ find-free (caddr exp)
-             vars))
-          ((while begin and or)
-           (fold find-free vars (cdr exp)))
-          ((quasiquote) ) ;;TODO
-          (else 
-            (fold find-free vars exp))))))
+           (set-cons vars (found-action exp))
+           vars))]
+      [(list? exp)
+       (case (get-symbol (car exp))
+         ((quote) vars)
+         ((lambda) ) ;;TODO
+         ((if)
+          (if (null? (cdddr exp))
+            ($ find (cadr exp) ;test
+              $ find (caddr exp)  ;then
+              vars)
+            ($ find (cadr exp) ;test
+              $ find (caddr exp) ;then
+              $ find (cadddr exp) ;else
+              vars))) ;else
+         ((set!)
+          ($ find (cadr exp)
+            $ find (caddr exp)
+            vars))
+         ((while begin and or)
+          (fold find vars (cdr exp)))
+         ((quasiquote) ) ;;TODO
+         (else 
+           (fold find vars exp)))]
+      [else vars]))
+  (find exp vars))
 
+(define-vise-renderer (lambda form ctx)
   (ensure-expr-ctx form ctx)
   (let1 func-name (symbol->string (gensym "s:display"))
     (add-auto-generate-exp 
@@ -232,7 +236,7 @@
         (map
           (lambda (var) 
             #`"',(vim-symbol var)':,(vim-symbol var)")
-          (fold find-free '() (cddr form)))
+          (fold (pa$ find-free identity) '() (cddr form)))
         "," 'prefix))
     (display "}")
     ))
@@ -295,6 +299,40 @@
      (add-new-line)
      (print "endwhile")]))
 
+(define-vise-renderer (list-func form ctx)
+  ;(ensure-expr-ctx form ctx)
+  (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
+    (display "call "))
+  (display (cadr form))
+  (display "(")
+  (vise-render 'expr (caddr form))
+  (display ",\"")
+  (if (eq? 'lambda (vexp (car (cadddr form))))
+    (let* ([lambda-form (cadddr form)]
+           [lambda-env (slot-ref (caadr lambda-form) 'env)]
+           [free (find-free
+                   (lambda (exp) 
+                     (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
+                       (env-add-symbol lambda-env sym 'arg)))
+                   (cddr lambda-form) '())]
+           [func-name (symbol->string (gensym "s:list_func"))])
+      (add-auto-generate-exp
+        func-name
+        `(defun ,func-name 
+                ,(append (cadr lambda-form) free) :normal
+                ,@(cddr lambda-form)))
+      (vise-render 'expr 
+                   `(,func-name 
+                      v:val
+                      ,@(map
+                          (lambda (o) 
+                            (make <vsymbol> 
+                                  :exp (vexp o) 
+                                  :env (slot-ref (car form) 'env)))
+                          free))))
+    (vise-render 'expr (cadddr form)))
+  (display "\")")
+  (add-new-line))
 
 (define-vise-renderer (return form ctx)
   (ensure-stmt-ctx form ctx)
