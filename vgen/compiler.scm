@@ -5,6 +5,7 @@
   (use util.match)
   (use srfi-1)
   (use srfi-13)
+  (use util.list)
 
   (use vgen.util)
   (export-all)

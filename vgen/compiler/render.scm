@@ -136,6 +136,29 @@
 ;; Syntax
 ;;
 
+(define (is-ctx-expr-exp? exp)
+  (case (and (list? exp) (vexp (car exp)))
+    [(return echo defvar set!) #f]
+    [(if let let* dolist while begin)
+     (is-ctx-expr-exp?  (car (last-pair exp)))]
+    [else #t]))
+
+(define (replace-last-expr->return-expr body)
+  (if (eq? 'if (vexp (car body)))
+    `(,(car body) ,(cadr body) ;if test
+      ,@(replace-last-expr->return-expr (list (caddr body))) ;then
+      ,@(if (null? (cdddr body)) '() (replace-last-expr->return-expr (list (cadddr body)))))  ;else
+    (let loop ((body body)
+               (acc '()))
+      (if (null? (cdr body))
+        (reverse! (cons 
+                    (case (and (list? (car body)) (vexp (caar body)))
+                      [(if let let* dolist while begin)
+                       (replace-last-expr->return-expr (car body))]
+                      [else (list 'return (car body))])
+                    acc))
+        (loop (cdr body) (cons (car body) acc))))))
+
 (define-vise-renderer (defun form ctx)
   (define (gen-args args)
     ($ (cut string-join <> ",")
@@ -143,6 +166,14 @@
       $ map (lambda (sym) 
               (remove-symbol-prefix (get-vim-name (env-find-data (@ sym.env) sym))))
       args))
+  (define (render-body body)
+    (let1 body (if (is-ctx-expr-exp? (car (last-pair body)))
+                 (replace-last-expr->return-expr body)
+                 body)
+      (add-indent 
+        (vise-render 'stmt `(begin ,@body)))
+      (add-new-line)))
+
   (define (gen-vfn name args modify body)
     (display "function! ")
     (display (vim-symbol name))
@@ -152,9 +183,7 @@
     (unless (eq? modify :normal)
       (display modify))
     (newline)
-    (add-indent 
-      (vise-render 'stmt `(begin ,@body)))
-    (add-new-line)
+    (render-body body)
     (print "endfunction"))
 
   (ensure-toplevel-ctx form ctx)
