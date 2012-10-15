@@ -274,7 +274,7 @@
        (add-new-line)
        (add-indent (vise-render ctx then))
        (add-new-line)
-       (print "elseif")
+       (print "else")
        (add-indent (vise-render ctx else))])
     (add-new-line)
     (print "endif")))
