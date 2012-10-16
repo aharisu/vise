@@ -25,6 +25,7 @@
 (define-class <vexp> ()
   (
    (exp :init-keyword :exp)
+   (attr :init-value '())
    )
   )
 
@@ -77,14 +78,14 @@
    )
   )
 
-(define (env-data-attr-push! env-data attr)
-  (@! env-data.attr (set-cons (@ env-data.attr) attr)))
+(define (attr-push! o attr)
+  (@! o.attr (set-cons (@ o.attr) attr)))
 
-(define (env-data-attr-remove! env-data attr)
-  (@! env-data.attr (remove! (pa$ equal? attr) (@ env-data.attr))))
+(define (attr-remove! o attr)
+  (@! o.attr (remove! (pa$ equal? attr) (@ o.attr))))
 
-(define (env-data-has-attr? env-data attr)
-  (set-exists (@ env-data.attr) attr))
+(define (has-attr? o attr)
+  (set-exists (@ o.attr) attr))
 
 (define (get-vim-name env-data)
   (if (@ env-data.vim-name)

@@ -20,7 +20,7 @@
        [(lambda) (check-lambda nest-quasiquote exp)]
        [(if) (check-if nest-quasiquote exp)]
        [(set!) (check-set! nest-quasiquote exp)]
-       [(let*) (check-let* nest-quasiquote exp)]
+       [(let) (check-let nest-quasiquote exp)]
        [(dolist) (check-dolist nest-quasiquote exp)]
        [(while begin and or)
         (for-each
@@ -46,11 +46,11 @@
   (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
     (cond
       ((and (zero? (@ d.ref-count)) (zero? (@ d.set-count)))
-       (env-data-attr-push! d 'not-use))
+       (attr-push! d 'not-use))
       ((zero? (@ d.ref-count))
-       (env-data-attr-push! d 'set-only))
+       (attr-push! d 'set-only))
       ((zero? (@ d.set-count))
-       (env-data-attr-push! d 'ref-only)))
+       (attr-push! d 'ref-only)))
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
                 (char-upper-case? (string-ref symbol 0));global command?
@@ -139,7 +139,7 @@
     (pa$ check-expression nest-quasiquote)
     (cddr exp)))
 
-(define (check-let* nest-quasiquote exp)
+(define (check-let nest-quasiquote exp)
   ;;check declare
   (for-each
     (lambda (spec)
@@ -148,7 +148,7 @@
     (cadr exp))
   ;;check body
   (when (null? (cddr exp))
-    (errorf <vise-error> "Nothing let* body: ~a" exp))
+    (errorf <vise-error> "Nothing let body: ~a" exp))
   (for-each
     (pa$ check-expression nest-quasiquote)
     (cddr exp)))
@@ -211,6 +211,6 @@
   (when (vsymbol? (car exp))
     (let1 d (env-find-data (slot-ref (car exp) 'env) (car exp))
       (if (and d (not (or (eq? (@ d.scope) 'syntax)
-                        (env-data-has-attr? d 'function))))
-        (env-data-attr-push! d 'func-call)))))
+                        (has-attr? d 'function))))
+        (attr-push! d 'func-call)))))
 

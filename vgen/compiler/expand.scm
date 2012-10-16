@@ -26,7 +26,7 @@
        [(lambda) (expand-lambda env exp)]
        [(if) (expand-if env exp)]
        [(set!) (expand-set! env exp)]
-       [(let*) (expand-let* env exp)]
+       [(let* let letrec) (expand-let env exp)]
        [(dolist) (expand-dolist env exp)]
        [(while begin and or quasiquote unquote unquote-splicing)
         (cons 
@@ -78,7 +78,7 @@
   (and (= 1 (length (cddr proc)))
     (list? (caddr proc))
     (not (or* eq? (caaddr proc)
-              'lambda 'if 'set! 'let* 'dolist 'while 'begin
+              'lambda 'if 'set! 'let 'let* 'letrec 'dolist 'while 'begin
               'quasiquote 'unquote 'unquote-splicing 'list-func))))
 
 (define (replace-symbol sym-from sym-to body)
@@ -174,7 +174,7 @@
           (if (symbol? name) ;name symbol
             (rlet1 sym (make <vsymbol> :exp name :env env)
               (env-add-symbol env sym scope)
-              (env-data-attr-push! (env-find-data env sym) 'function))
+              (attr-push! (env-find-data env sym) 'function))
             name)
           (constract-proc-args fn-env (car rest))) ;args
         (parse-body fn-env (cdr rest))))))  ;body
@@ -185,7 +185,7 @@
       (rlet1 sym (make <vsymbol> :exp sym :env env)
         (env-add-symbol env sym scope)
         (when (and (list? init) (eq? (car init) 'lambda))
-          (env-data-attr-push! (env-find-data env sym) 'lambda)
+          (attr-push! (env-find-data env sym) 'lambda)
           scope))
       sym))
   (cond
@@ -265,28 +265,46 @@
            body)))]
     [else (errorf <vise-error> "Compiler: Bad syntax:~a" exp)]))
 
-(define (expand-let* env exp)
+(define (expand-let env exp)
   (match exp
-    [(_ vars . body)
+    [(_ (? list? vars) . body)
      (receive (vars env)
-       (let loop ((vars vars)
-                  (env (make-env env))
-                  (acc '()))
-         (if (null? vars)
-           (values (reverse! acc) env)
-           (loop (cdr vars)
-                 (make-env env)
-                 (cons
-                   (list
-                     (expand-symbol-bind (caar vars) (cadar vars) 'local env)
-                     (expand-expression (@ env.parent) (cadar vars)))
-                   acc))))
-       `(,(make <vsymbol> :exp (car exp) :env env) ;let*
+       (if (eq? (car exp) 'letrec)
+         (let ([env (make-env env)]
+               [var-loop (lambda (f)
+                           (let loop ((vars vars)
+                                      (acc '()))
+                             (if (null? vars)
+                               (reverse! acc)
+                               (loop (cdr vars) (cons (f vars) acc)))))])
+           (values
+             (map
+               list
+               (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) 'local env)))
+               (var-loop (lambda (var) (expand-expression env (cadar var)))))
+             env))
+         (let loop ((vars vars)
+                    (env (make-env env))
+                    (acc '()))
+           (if (null? vars)
+             (values (reverse! acc) env)
+             (loop (cdr vars)
+                   (if (eq? (car exp) 'let*) (make-env env) env)
+                   (cons
+                     (list
+                       (expand-symbol-bind (caar vars) (cadar vars) 'local env)
+                       (expand-expression (@ env.parent) (cadar vars)))
+                     acc)))))
+       `(,(make <vsymbol> :exp 'let :env env) ;let or let* or letrec
           ,vars
           ,@(map ;body
               (pa$ expand-expression env)
               (cddr exp))))]
-    [_ (error "Bad let* syntax:" exp)]))
+
+    [(let (? symbol? name) ((var . spec) ...) . body)
+     (expand-expression env `(letrec ((,name (lambda ,var ,@body)))
+                               (,name ,@(map car spec))))]
+    [_ (error "Bad let syntax:" exp)]))
 
 (define (expand-apply env exp)
   (let1 e (env-find-exp env (car exp))
@@ -298,12 +316,12 @@
 
 (define (expand-refer-symbol env exp)
   (rlet1 sym (make <vsymbol> 
-                  :exp exp
-                  :env env)
+                   :exp exp
+                   :env env)
     (receive (d outside?) (env-find-data-with-outside-lambda? env sym)
       (when d
         (@inc! d.ref-count)
         (when (and outside? (eq? (@ d.scope) 'local))
-          (env-data-attr-push! d 'free))))))
+          (attr-push! d 'free))))))
 
 

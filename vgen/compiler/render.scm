@@ -47,9 +47,9 @@
   (let1 d (and (vsymbol? symbol) (env-find-data (@ symbol.env) symbol))
     (and d 
       (eq? (@ d.scope) 'local)
-      (env-data-has-attr? d 'free)
-      (not (or (env-data-has-attr? d 'ref-only) 
-             (env-data-has-attr? d 'not-use))))))
+      (has-attr? d 'free)
+      (not (or (has-attr? d 'ref-only) 
+             (has-attr? d 'not-use))))))
 
 (define (vim-ref-symbol symbol)
   (let1 sym (vim-symbol symbol)
@@ -68,12 +68,12 @@
     (display "call "))
   (display 
     (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
-          (sym (vim-symbol (car form)))
+          (sym (vim-ref-symbol (car form)))
           (d (and (vsymbol? (car form))
                (env-find-data (slot-ref (car form) 'env) (car form)))))
       (cond
-        ((or (not d) (env-data-has-attr? d 'function)) (string-append sym params))
-        ((env-data-has-attr? d 'lambda) (string-append sym ".func" params))
+        ((or (not d) (has-attr? d 'function)) (string-append sym params))
+        ((has-attr? d 'lambda) (string-append sym ".func" params))
         (else #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"))))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
@@ -139,7 +139,7 @@
 (define (is-ctx-expr-exp? exp)
   (case (and (list? exp) (vexp (car exp)))
     [(return echo defvar set!) #f]
-    [(if let let* dolist while begin)
+    [(if let dolist while begin)
      (is-ctx-expr-exp?  (car (last-pair exp)))]
     [else #t]))
 
@@ -153,7 +153,7 @@
       (if (null? (cdr body))
         (reverse! (cons 
                     (case (and (list? (car body)) (vexp (caar body)))
-                      [(if let let* dolist while begin)
+                      [(if let dolist while begin)
                        (replace-last-expr->return-expr (car body))]
                       [else (list 'return (car body))])
                     acc))
@@ -190,7 +190,53 @@
   (match form
     [(_ name (args ...) modify . body) (gen-vfn name args modify body)]))
 
+(define (find-symbol-recursion action arg exp)
+  (define (find exp arg)
+    (cond
+      [(vsymbol? exp)
+       (action exp arg)]
+      [(list? exp)
+       (case (get-symbol (car exp))
+         ((quote) arg)
+         ((lambda) (fold find arg (cddr exp)))
+         ((if)
+          (if (null? (cdddr exp))
+            ($ find (cadr exp) ;test
+              $ find (caddr exp)  ;then
+              arg)
+            ($ find (cadr exp) ;test
+              $ find (caddr exp) ;then
+              $ find (cadddr exp) ;else
+              arg))) ;else
+         ((set!)
+          ($ find (cadr exp)
+            $ find (caddr exp)
+            arg))
+         ((while begin and or)
+          (fold find arg (cdr exp)))
+         ((quasiquote) ) ;;TODO
+         (else 
+           (fold find arg exp)))]
+      [else arg]))
+  (find exp arg))
+
 (define (render-symbol-bind sym init :optional (for-rendering? #f))
+  (define (find-self-recursion sym init)
+    (if (and (list? init) (eq? 'lambda (vexp (car init))))
+      (begin (when (not (vsymbol? sym))
+               (errorf <vise-error> "Not allow distribute binding:~a ~a" sym init))
+        (let1 self-data (env-find-data (@ sym.env) sym)
+          (find-symbol-recursion
+            (lambda (exp vars)
+              (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+                (if (and d (has-attr? d 'free) outside? (eq? self-data d))
+                  (begin
+                    (attr-push! exp 'self-recursion) 
+                    (set-cons vars exp))
+                  vars)))
+            '() init)))
+      '()))
+
   (display (if for-rendering?  "for " "let "))
   (if (vsymbol? sym)
     (display (vim-symbol sym))
@@ -205,53 +251,35 @@
             (display ","))
           (loop (cdr sym))))
       (display "]")))
-  (display (if for-rendering?  " in " " =("))
-  (display
-    (let1 init (vise-render-to-string 'expr init)
-      (if (boxing? sym)
-        (vim-boxing init)
-        init)))
-  (display (if for-rendering?  "" ")"))
-  (add-new-line))
+  ;;find and mark 
+  (let1 self-rec (find-self-recursion sym init)
+
+    (display (if for-rendering?  " in " " =("))
+    (display
+      (let1 init (vise-render-to-string 'expr init)
+        (if (boxing? sym)
+          (vim-boxing init)
+          init)))
+    (display (if for-rendering?  "" ")"))
+    (add-new-line)
+    (unless (null? self-rec)
+      (print #`"let ,(vim-symbol sym)[',(vim-symbol sym)'] = ,(vim-symbol sym)"))))
 
 (define-vise-renderer (defvar form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
   (render-symbol-bind (cadr form) (caddr form)))
 
-(define (find-free found-action exp vars)
-  (define (find exp vars)
-    (cond
-      [(vsymbol? exp)
-       (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-         (if (and d (env-data-has-attr? d 'free) outside?)
-           (set-cons vars (found-action exp))
-           vars))]
-      [(list? exp)
-       (case (get-symbol (car exp))
-         ((quote) vars)
-         ((lambda) ) ;;TODO
-         ((if)
-          (if (null? (cdddr exp))
-            ($ find (cadr exp) ;test
-              $ find (caddr exp)  ;then
-              vars)
-            ($ find (cadr exp) ;test
-              $ find (caddr exp) ;then
-              $ find (cadddr exp) ;else
-              vars))) ;else
-         ((set!)
-          ($ find (cadr exp)
-            $ find (caddr exp)
-            vars))
-         ((while begin and or)
-          (fold find vars (cdr exp)))
-         ((quasiquote) ) ;;TODO
-         (else 
-           (fold find vars exp)))]
-      [else vars]))
-  (find exp vars))
-
 (define-vise-renderer (lambda form ctx)
+  (define (find-self-recursion exp vars)
+    (find-symbol-recursion
+      (lambda (exp vars)
+        (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+          (if (and (not (has-attr? exp 'self-recursion)) 
+                d (has-attr? d 'free) outside?)
+            (set-cons vars exp)
+            vars)))
+      vars exp))
+
   (ensure-expr-ctx form ctx)
   (let1 func-name (symbol->string (gensym "s:display"))
     (add-auto-generate-exp 
@@ -263,14 +291,15 @@
     (display
       (string-join
         (map
-          (lambda (var) 
-            #`"',(vim-symbol var)':,(vim-symbol var)")
-          (fold (pa$ find-free identity) '() (cddr form)))
+          (lambda (var) #`"',(vim-symbol var)':,(vim-symbol var)")
+          (fold 
+            find-self-recursion
+            '()
+            (cddr form)))
         "," 'prefix))
-    (display "}")
-    ))
+    (display "}")))
 
-(define-vise-renderer (let* form ctx)
+(define-vise-renderer (let form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
   ;;render vars declare
   (for-each
@@ -329,6 +358,15 @@
      (print "endwhile")]))
 
 (define-vise-renderer (list-func form ctx)
+  (define (find-free found-action exp :optional (vars '()))
+    (find-symbol-recursion 
+      (lambda (exp vars)
+        (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+          (if (and d (has-attr? d 'free) outside?)
+            (set-cons vars (found-action exp))
+            vars)))
+      vars exp))
+
   ;(ensure-expr-ctx form ctx)
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (display "call "))
@@ -343,7 +381,7 @@
                    (lambda (exp) 
                      (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
                        (env-add-symbol lambda-env sym 'arg)))
-                   (cddr lambda-form) '())]
+                   (cddr lambda-form))]
            [func-name (symbol->string (gensym "s:list_func"))])
       (add-auto-generate-exp
         func-name
@@ -393,7 +431,7 @@
      (display
        (let ((val (vise-render-to-string 'expr val))
              (d (env-find-data (@ var.env) var)))
-         (if (and d (env-data-has-attr? d 'free))
+         (if (and d (has-attr? d 'free))
            (vim-boxing val)
            val)))
      (display ")")]
@@ -460,11 +498,11 @@
      (match form
        [(_ a b)
         (display "(")
-        (display (vise-render 'expr a))
+        (vise-render 'expr a)
         (display ")")
         (display ,sop)
         (display "(")
-        (display (vise-render 'expr b))
+        (vise-render 'expr b)
         (display ")")])))
 
 (define-binary %       "%")
