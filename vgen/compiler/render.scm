@@ -9,11 +9,13 @@
 (define (vise-phase-render out-port exp)
   (let loop ((exp exp))
     (parameterize ([auto-generate-exp '()])
-      (for-each
-        (cut vise-render 'toplevel <> out-port)
-        exp)
-      (unless (null? (auto-generate-exp))
-        (loop (map cdr (auto-generate-exp)))))))
+      (let1 str-port (make-vise-output-port (open-output-string))
+        (for-each
+          (cut vise-render 'toplevel <> str-port)
+          exp)
+        (unless (null? (auto-generate-exp))
+          (loop (map cdr (auto-generate-exp))))
+        (display (get-output-string (@ str-port.raw)) out-port)))))
 
 (define (vise-render ctx exp :optional (out-port (current-output-port)))
   (with-output-to-port
@@ -145,9 +147,10 @@
 
 (define (replace-last-expr->return-expr body)
   (if (eq? 'if (vexp (car body)))
-    `(,(car body) ,(cadr body) ;if test
-      ,@(replace-last-expr->return-expr (list (caddr body))) ;then
-      ,@(if (null? (cdddr body)) '() (replace-last-expr->return-expr (list (cadddr body)))))  ;else
+    `(,(car body) ;if
+       ,(cadr body) ;test
+       ,@(replace-last-expr->return-expr (list (caddr body))) ;then
+       ,@(if (null? (cdddr body)) '() (replace-last-expr->return-expr (list (cadddr body)))))  ;else
     (let loop ((body body)
                (acc '()))
       (if (null? (cdr body))

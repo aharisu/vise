@@ -272,7 +272,7 @@
                        (hash-table-for-each
                          renderer-table
                          (lambda (k v) (env-add-symbol&exp env k 'syntax v)))))
-         (out-port (make-vise-output-port (standard-output-port)))
+         (out-port (standard-output-port))
          (exp-list ((.$
                       (pa$ vise-phase-render out-port)
                       ;check
