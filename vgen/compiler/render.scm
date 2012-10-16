@@ -29,8 +29,7 @@
            (let1 ret (renderer exp ctx)
              (unless (undefined? ret) (vise-render ctx ret out-port)))
            (render-func-call ctx exp))]
-        [else ;litera
-          (display exp)]))))
+        [else (render-literal exp)]))));literal
 
 (define (vim-symbol symbol)
   (vise-render-identifier
@@ -137,6 +136,26 @@
 ;;------------------------------------------------------------
 ;; Syntax
 ;;
+
+(define (render-literal exp)
+  (display
+    (cond
+      [(list? exp)
+       (string-append
+         "["
+         (string-join 
+           (map (pa$ vise-render-to-string 'expr) exp) 
+           ",")
+         "]")]
+      [(string? exp) 
+       (string-append
+         "\""
+         (regexp-replace-all #/\"/ exp "\\\\\"")
+         "\"")]
+      [else exp])))
+
+(define-vise-renderer (quote form ctx)
+  (render-literal (cadr form)))
 
 (define (is-ctx-expr-exp? exp)
   (case (and (list? exp) (vexp (car exp)))
@@ -445,7 +464,8 @@
   (match form
     [(_ expr)
      (display "echo ")
-     (vise-render 'expr expr)]))
+     (vise-render 'expr expr)
+     (add-new-line)]))
 
 
 
