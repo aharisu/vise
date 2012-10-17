@@ -38,6 +38,7 @@
           (for-each
             (pa$ check-expression (- nest-quasiquote 1))
             (cdr exp)))]
+       [(dict) (check-dict nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
      (errorf <vise-error> "Compiler: Syntax error:~a" exp)]))
@@ -203,6 +204,14 @@
         (qq-each nest (car qq)))))
 
   (qq-check (cdr exp) nest-level))
+
+(define (check-dict nest-level exp)
+  (for-each
+    (lambda (item)
+      (unless (vsymbol? (car item))
+        (errorf <vise-error> "Illegal dictionary key:~a ~a" (car item) exp))
+      (check-expression nest-level (cadr item)))
+    (cdr exp)))
 
 (define (check-apply nest-level exp)
   (for-each

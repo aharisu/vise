@@ -474,7 +474,20 @@
      (vise-render 'expr expr)
      (add-new-line)]))
 
-
+(define-vise-renderer (dict form ctx)
+  (ensure-expr-ctx form ctx)
+  (display "{")
+  (display (string-join 
+             (map
+               (lambda (item)
+                 (string-append 
+                   "'"
+                   (x->string (vexp (car item)))
+                   "' : "
+                   (vise-render-to-string 'expr (cadr item))))
+               (cdr form))
+             ","))
+  (display "}"))
 
 ;;------------------------------------------------------------
 ;; Operators

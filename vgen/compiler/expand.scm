@@ -38,6 +38,7 @@
           (cadr exp) ;keyword
           (expand-expression env (caddr exp))
           (expand-expression env (cadddr exp)))]
+       [(dict) (expand-dict env exp)]
        [else (expand-apply env exp)])]
     [(symbol? exp) (expand-refer-symbol env exp)]
     [else exp]))
@@ -322,6 +323,21 @@
      (expand-expression env `(letrec ((,name (lambda ,var ,@body)))
                                (,name ,@(map car spec))))]
     [_ (error "Bad let syntax:" exp)]))
+
+(define (expand-dict env exp)
+  (append
+    (cons (make <vsymbol> :exp (car exp) :env env) '())
+    (match (cdr exp)
+      [((sym init) ...)
+       (map
+         (lambda (sym init)
+           (list
+             (if (symbol? sym)
+               (make <vsymbol> :exp sym :env env)
+               sym)
+             (expand-expression env init)))
+         sym init)]
+      [_ (error <vise-error> "dict format error")])))
 
 (define (expand-apply env exp)
   (let1 e (env-find-exp env (car exp))
