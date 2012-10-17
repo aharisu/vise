@@ -89,6 +89,23 @@
 
 (define (init-phase-expand env)
   ;;add global macro
+  ;;cond
+  (register-macro
+    env
+    cond
+    (match
+      [(_ ('else . rest)) `(begin ,@rest)]
+      [(_ (test)) test]
+      [(_ (test) . clause)
+       (let1 temp (gensym "temp")
+         `(let ((,temp ,test))
+            (if ,temp
+              ,temp
+              (cond ,@clause))))]
+      [(_ (test . rest))
+       `(if ,test (begin ,@rest))]
+      [(_ (test . rest) . clause)
+       `(if ,test (begin ,@rest) (cond ,@clause))]))
   ;;when
   (register-macro 
     env

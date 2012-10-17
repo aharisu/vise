@@ -342,22 +342,28 @@
 
 (define-vise-renderer (if form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
-  (let1 cctx 'expr
-    (display "if ")
-    (match form
-      [(_ test then)
-       (vise-render cctx test)
-       (add-new-line)
-       (add-indent (vise-render ctx then)) ]
-      [(_ test then else)
-       (vise-render cctx test)
-       (add-new-line)
-       (add-indent (vise-render ctx then))
-       (add-new-line)
-       (print "else")
-       (add-indent (vise-render ctx else))])
-    (add-new-line)
-    (print "endif")))
+  (display "if ")
+  (match form
+    [(_ test then)
+     (vise-render 'expr test)
+     (add-new-line)
+     (add-indent (vise-render ctx then))
+     (add-new-line)
+     (print "endif")]
+    [(_ test then else)
+     (vise-render 'expr test)
+     (add-new-line)
+     (add-indent (vise-render ctx then))
+     (add-new-line)
+     (if (and (list? else) (eq? (vexp (car else)) 'if))
+       (begin
+         (display "else")
+         (vise-render ctx else))
+       (begin
+         (print "else")
+         (add-indent (vise-render ctx else))
+         (add-new-line)
+         (print "endif")))]))
 
 (define-vise-renderer (dolist form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
