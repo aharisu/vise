@@ -29,7 +29,7 @@
            (let1 ret (renderer exp ctx)
              (unless (undefined? ret) (vise-render ctx ret out-port)))
            (render-func-call ctx exp))]
-        [else (render-literal exp)]))));literal
+        [else (render-literal exp ctx)]))));literal
 
 (define (vim-symbol symbol)
   (vise-render-identifier
@@ -137,7 +137,8 @@
 ;; Syntax
 ;;
 
-(define (render-literal exp)
+(define (render-literal exp ctx)
+  (ensure-expr-ctx exp ctx)
   (display
     (cond
       [(list? exp)
@@ -155,7 +156,7 @@
       [else exp])))
 
 (define-vise-renderer (quote form ctx)
-  (render-literal (cadr form)))
+  (render-literal (cadr form) ctx))
 
 (define (is-ctx-expr-exp? exp)
   (case (and (list? exp) (vexp (car exp)))
