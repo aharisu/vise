@@ -6,9 +6,6 @@
   exp-list)
 
 (define (check-expression nest-quasiquote exp)
-  (define (ref-error exp)
-    (errorf <vise-error> "Compiler: ~a reference does not exist" exp))
-
   (cond 
     [(vsymbol? exp)
      (check-refer-symbol exp)]

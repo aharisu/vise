@@ -26,6 +26,7 @@
   (
    (exp :init-keyword :exp)
    (attr :init-value '())
+   (prop :init-keyword :prop  :init-value '())
    )
   )
 
@@ -257,12 +258,93 @@
 ;;Compile
 ;;----------
 
+(define (sexp-traverse form-list hook)
+  (define (loop form)
+    (if (list? form)
+      (if-let1 func (assq-ref hook (vexp (car form)))
+        (func form loop)
+        (case (vexp (car form))
+          [(quote) form]
+          [(defun) 
+           (append
+             (list
+               (car form) ;defun
+               (cadr form) ;name
+               (caddr form) ;args
+               (cadddr form)) ;modifier
+             (map loop (cddddr form)))]
+          [(defvar)
+           (list
+             (car form) ;defvar
+             (cadr form) ;name
+             (loop (caddr form)))]
+          [(lambda) 
+           (append
+             (list
+               (car form) ;lambda
+               (cadr form)) ;args
+             (map loop (cddr form)))]
+          [(if) 
+           (if (null? (cdddr form))
+             (list
+               (car form)
+               (loop (cadr form))
+               (loop (caddr form)))
+             (list
+               (car form)
+               (loop (cadr form))
+               (loop (caddr form))
+               (loop (cadddr form))))]
+          [(set!) 
+           (list
+             (car form);set!
+             (cadr form) ;name
+             (loop (caddr form)))]
+          [(let)
+           (append
+             (list
+               (car form) ;let
+               (map
+                 (lambda (clause) (list (car clause) (loop (cadr clause))))
+                 (cadr form)))
+             (map loop (cddr form)))]
+          [(dolist)
+           (append
+             (list
+               (car form)
+               (list
+                 (caadr form)
+                 (loop (cadadr form))))
+             (map loop (cddr form)))]
+          [(while begin and or quasiquote unquote unquote-splicing)
+           (append
+             (cons (car form) '()) ;name
+             (map loop (cdr form)))]
+          [(list-func)
+           (list
+             (car form) ;list
+             (cadr form) ;function
+             (loop (caddr form))
+             (loop (cadddr form)))]
+          [(dict)
+           (append
+             (cons (car form) '())
+             (map
+               (lambda (pair) (list (car pair) (loop (cadr pair))))
+               (cdr form)))]
+          [else (map loop form)]))
+      form))
+
+  (map loop form-list))
+
 ;(add-load-path ".." :relative)
 (include "compiler/read.scm")
 (include "compiler/load.scm")
 (include "compiler/expand.scm")
 (include "compiler/check.scm")
 (include "compiler/render.scm")
+
+(include "compiler/self-recursion.scm")
 
 (define (vise-compile-from-string str)
   (vise-compile (open-input-string str)))
@@ -275,7 +357,7 @@
          (out-port (standard-output-port))
          (exp-list ((.$
                       (pa$ vise-phase-render out-port)
-                      ;check
+                      vise-phase-self-recursion
                       vise-phase-check
                       (pa$ vise-phase-expand global-env)
                       vise-phase-load 

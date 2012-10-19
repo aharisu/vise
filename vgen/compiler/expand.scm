@@ -233,13 +233,16 @@
 (define (expand-lambda env exp)
   (when (< (length exp) 3)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
-  (let1 lambda-env (make-env env #t)
+  (let* ([lambda-env (make-env env #t)]
+         [injection-env (make-env lambda-env)])
     (append
       (list
-        (make <vsymbol> :exp (car exp) :env env) ;lambda
+        (make <vsymbol> :exp (car exp)  ;lambda
+              :env env :prop `((lambda-env . ,lambda-env)
+                               (injection-env . ,injection-env)))
         (constract-proc-args lambda-env (cadr exp))) ;args
       (map ;body
-        (pa$ expand-expression lambda-env)
+        (pa$ expand-expression injection-env)
         (cddr exp)))))
 
 (define (expand-if env exp)
@@ -274,7 +277,7 @@
      (let1 dolist-env (make-env env)
        (append
          (list
-           (make <vsymbol> :exp (car exp) :env env) ;dolist
+           (make <vsymbol> :exp (car exp) :env env) ;dolist 
            (list
              (expand-symbol-bind var expr 'local dolist-env)
              (expand-expression env expr)))
@@ -286,9 +289,9 @@
 (define (expand-let env exp)
   (match exp
     [(_ (? list? vars) . body)
-     (receive (vars env)
+     (receive (vars let-env)
        (if (eq? (car exp) 'letrec)
-         (let ([env (make-env env)]
+         (let ([let-env (make-env env)]
                [var-loop (lambda (f)
                            (let loop ((vars vars)
                                       (acc '()))
@@ -298,25 +301,25 @@
            (values
              (map
                list
-               (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) 'local env)))
-               (var-loop (lambda (var) (expand-expression env (cadar var)))))
-             env))
+               (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) 'local let-env)))
+               (var-loop (lambda (var) (expand-expression let-env (cadar var)))))
+             let-env))
          (let loop ((vars vars)
-                    (env (make-env env))
+                    (let-env (make-env env))
                     (acc '()))
            (if (null? vars)
-             (values (reverse! acc) env)
+             (values (reverse! acc) let-env)
              (loop (cdr vars)
-                   (if (eq? (car exp) 'let*) (make-env env) env)
+                   (if (eq? (car exp) 'let*) (make-env let-env) let-env)
                    (cons
                      (list
-                       (expand-symbol-bind (caar vars) (cadar vars) 'local env)
-                       (expand-expression (@ env.parent) (cadar vars)))
+                       (expand-symbol-bind (caar vars) (cadar vars) 'local let-env)
+                       (expand-expression (@ let-env.parent) (cadar vars)))
                      acc)))))
        `(,(make <vsymbol> :exp 'let :env env) ;let or let* or letrec
           ,vars
           ,@(map ;body
-              (pa$ expand-expression env)
+              (pa$ expand-expression let-env)
               (cddr exp))))]
 
     [(let (? symbol? name) ((var . spec) ...) . body)
