@@ -35,8 +35,8 @@
   (vise-render-identifier
     (if-let1 d (and (vsymbol? symbol)
                  (env-find-data (@ symbol.env) symbol))
-      (get-vim-name d)
-      (x->string symbol))))
+        (get-vim-name d)
+        (x->string symbol))))
 
 (define (vim-boxing vim-symbol)
   (string-append "[" vim-symbol "]"))
@@ -153,6 +153,7 @@
          "\""
          (regexp-replace-all #/\"/ exp "\\\\\"")
          "\"")]
+      [(boolean? exp) (if exp 1 0)]
       [else exp])))
 
 (define-vise-renderer (quote form ctx)
