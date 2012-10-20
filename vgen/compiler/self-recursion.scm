@@ -90,7 +90,7 @@
          [(set!)
           (list (car exp) (cadr exp)
                 (find-tail-exp action (caddr exp)))]
-         [(return) exp]
+         [(return) (find-tail-exp action (cadr exp))]
          [(while echo) exp]
          [(quasiquote) exp] ;;TODO
          [else (action exp)])]
