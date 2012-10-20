@@ -89,6 +89,21 @@
     (else body)))
 
 (define (init-phase-expand env)
+  (define (expand-list-func type proc l)
+    (if (check-lambda-for-list-fnction `(,type ,proc ,l) proc 1 2)
+      (if (is-expand-lambda-body? proc)
+        `(list-func 
+           ,type ,l 
+           ,@(if (= 1 (length (cadr proc)))
+               (replace-symbol (caadr proc) 'v:val (cddr proc))
+               ((.$
+                  (pa$ replace-symbol (cadadr proc) 'v:val)
+                  (pa$ replace-symbol (caadr proc) 'v:key))
+                (cddr proc))))
+        `(list-func ,type ,l ,proc))
+      `(list-func ,type ,l (,proc v:val)))
+    )
+
   ;;add global macro
   ;;cond
   (register-macro
@@ -121,18 +136,12 @@
   (register-macro
     env
     (map proc l)
-    (if (check-lambda-for-list-fnction `(map ,proc ,l) proc 1 2)
-      (if (is-expand-lambda-body? proc)
-        `(list-func 
-           :map ,l 
-           ,@(if (= 1 (length (cadr proc)))
-               (replace-symbol (caadr proc) 'v:val (cddr proc))
-               ((.$
-                  (pa$ replace-symbol (cadadr proc) 'v:val)
-                  (pa$ replace-symbol (caadr proc) 'v:key))
-                (cddr proc))))
-        `(list-func :map ,l ,proc))
-      `(list-func :map ,l (,proc v:val))))
+    (expand-list-func :map proc l))
+  ;;filter
+  (register-macro
+    env
+    (filter proc l)
+    (expand-list-func :filter proc l))
   ;;for-each
   (register-macro 
     env
