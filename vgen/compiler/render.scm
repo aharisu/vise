@@ -73,9 +73,10 @@
           (d (and (vsymbol? (car form))
                (env-find-data (slot-ref (car form) 'env) (car form)))))
       (cond
-        ((or (not d) (has-attr? d 'function)) (string-append sym params))
-        ((has-attr? d 'lambda) (string-append sym ".func" params))
-        (else #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"))))
+        [(or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function))
+         (string-append sym params)]
+        [(has-attr? d 'lambda) (string-append sym ".func" params)]
+        [else #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
 

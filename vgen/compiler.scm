@@ -108,7 +108,7 @@
         (sym (if (set-exists attr 'func-call)
                (string-titlecase (x->string sym))
                (x->string sym))))
-    (if (string-null? prefix)
+    (if (and (not (eq? scope 'syntax)) (string-null? prefix))
       (symbol->string 
         (gensym 
           (string-append 
@@ -349,11 +349,16 @@
 (define (vise-compile-from-string str)
   (vise-compile (open-input-string str)))
 
+(define vim-symbol-list (include "vim-function.scm"))
+
 (define (vise-compile in-port)
   (let* ((global-env (rlet1 env (make-env #f)
                        (hash-table-for-each
                          renderer-table
-                         (lambda (k v) (env-add-symbol&exp env k 'syntax v)))))
+                         (lambda (k v) (env-add-symbol&exp env k 'syntax v)))
+                       (for-each
+                         (lambda (sym) (env-add-symbol env sym 'syntax))
+                         vim-symbol-list)))
          (out-port (standard-output-port))
          (exp-list ((.$
                       (pa$ vise-phase-render out-port)
