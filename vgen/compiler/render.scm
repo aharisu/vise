@@ -35,8 +35,8 @@
   (vise-render-identifier
     (if-let1 d (and (vsymbol? symbol)
                  (env-find-data (@ symbol.env) symbol))
-        (get-vim-name d)
-        (x->string symbol))))
+      (get-vim-name d)
+      (x->string symbol))))
 
 (define (vim-boxing vim-symbol)
   (string-append "[" vim-symbol "]"))
@@ -343,29 +343,40 @@
     (cdr form)))
 
 (define-vise-renderer (if form ctx)
-  (ensure-stmt-or-toplevel-ctx form ctx)
-  (display "if ")
-  (match form
-    [(_ test then)
-     (vise-render 'expr test)
-     (add-new-line)
-     (add-indent (vise-render ctx then))
-     (add-new-line)
-     (print "endif")]
-    [(_ test then else)
-     (vise-render 'expr test)
-     (add-new-line)
-     (add-indent (vise-render ctx then))
-     (add-new-line)
-     (if (and (list? else) (eq? (vexp (car else)) 'if))
-       (begin
-         (display "else")
-         (vise-render ctx else))
-       (begin
-         (print "else")
-         (add-indent (vise-render ctx else))
-         (add-new-line)
-         (print "endif")))]))
+  (if (expr-ctx? ctx)
+    (match form
+      [(?: test then else)
+       (display "((")
+       (vise-render 'expr test)
+       (display ")?(")
+       (vise-render 'expr then)
+       (display "):(")
+       (vise-render 'expr else)
+       (display "))")]
+      [_ (errorf <vise-error> "Expression context 'if, else clause require:~a" form)])
+    (match form
+      [(_ test then)
+       (display "if ")
+       (vise-render 'expr test)
+       (add-new-line)
+       (add-indent (vise-render ctx then))
+       (add-new-line)
+       (print "endif")]
+      [(_ test then else)
+       (display "if ")
+       (vise-render 'expr test)
+       (add-new-line)
+       (add-indent (vise-render ctx then))
+       (add-new-line)
+       (if (and (list? else) (eq? (vexp (car else)) 'if))
+         (begin
+           (display "else")
+           (vise-render ctx else))
+         (begin
+           (print "else")
+           (add-indent (vise-render ctx else))
+           (add-new-line)
+           (print "endif")))])))
 
 (define-vise-renderer (dolist form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
@@ -560,18 +571,6 @@
 ;;TODO
 (define-binary +=      "+=")
 (define-binary -=      "-=")
-
-(define-vise-renderer (?: form ctx)
-  (ensure-expr-ctx form ctx)
-  (match form
-    [(?: test then else)
-     (display "((")
-     (vise-render 'expr test)
-     (display ")?(")
-     (vise-render 'expr then)
-     (display "):(")
-     (vise-render 'expr else)
-     (display "))")]))
 
 ;;
 ;;
