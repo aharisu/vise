@@ -319,12 +319,15 @@
                        (expand-symbol-bind (caar vars) (cadar vars) 'local let-env)
                        (expand-expression (@ let-env.parent) (cadar vars)))
                      acc)))))
-       `(,(make <vsymbol> :exp 'let :env env) ;let or let* or letrec
-          ,vars
-          ,@(map ;body
-              (pa$ expand-expression let-env)
-              (cddr exp))))]
-
+       (let1 injection-env (make-env let-env)
+         `(,(make <vsymbol> :exp 'let  ;let or let* or letrec
+                  :env env :prop `((body-env . ,let-env)
+                                   (injection-env . ,injection-env)))
+            ,vars
+            ,@(map ;body
+                (pa$ expand-expression injection-env)
+                (cddr exp)))))]
+    ;;named-let
     [(let (? symbol? name) ((var . spec) ...) . body)
      (expand-expression env `(letrec ((,name (lambda ,var ,@body)))
                                (,name ,@(map car spec))))]

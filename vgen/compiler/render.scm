@@ -324,14 +324,53 @@
     (display "}")))
 
 (define-vise-renderer (let form ctx)
-  (ensure-stmt-or-toplevel-ctx form ctx)
-  ;;render vars declare
-  (for-each
-    (lambda (vars)
-      (render-symbol-bind (car vars) (cadr vars)))
-    (cadr form))
-  ;;render body
-  (vise-render 'stmt `(begin ,@(cddr form))))
+  (define (all-ref-only? vars)
+    (every
+      (lambda (var)
+        (if (list? var)
+          (errorf <vise-error> "Expression context let, distribute binding not allow:~a" form)
+          (has-attr? (env-find-data (@ var.env) var) 'ref-only)))
+      vars))
+
+  (if (expr-ctx? ctx)
+    (let1 func-name (symbol->string (gensym "s:let_func"))
+      (add-auto-generate-exp
+        func-name
+        ;;constract auto generate function
+        `(defun ,func-name 
+                ,(map 
+                   (lambda (vars)
+                     ;;chage scope local -> arg
+                     (slot-set! (env-find-data (slot-ref (car vars) 'env) (car vars)) 'scope 'arg)
+                     (car vars))
+                   (cadr form))
+                :normal
+                ,@(if (all-ref-only? (map car (cadr form)))
+                    (cddr form)
+                    ;;surrounded by let
+                    (let ([body-env (assq-ref (slot-ref (car form) 'prop) 'body-env)]
+                          [injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)])
+                      `((,(make <vsymbol> :exp 'let :env injection-env)
+                          ,(map
+                             (lambda (var)
+                               (list
+                                 (rlet1 sym (make <vsymbol> :exp var :env injection-env)
+                                   (env-add-symbol injection-env sym 'local))
+                                 (make <vsymbol> :exp var :env body-env)))
+                             (map (.$ vexp car) (cadr form)))
+                          ;;original body
+                          ,@(cddr form)))))))
+      ;;call auto generate function
+      (vise-render 'expr `(,func-name ,@(map cadr (cadr form)))))
+    ;;render stetment context let
+    (begin
+      ;;render vars declare
+      (for-each
+        (lambda (vars)
+          (render-symbol-bind (car vars) (cadr vars)))
+        (cadr form))
+      ;;render body
+      (vise-render 'stmt `(begin ,@(cddr form))))))
 
 
 (define-vise-renderer (begin form ctx)
@@ -353,7 +392,7 @@
        (display "):(")
        (vise-render 'expr else)
        (display "))")]
-      [_ (errorf <vise-error> "Expression context 'if, else clause require:~a" form)])
+      [_ (errorf <vise-error> "Expression context if, else clause require:~a" form)])
     (match form
       [(_ test then)
        (display "if ")
