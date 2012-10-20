@@ -182,20 +182,23 @@
 
   (when (< (length exp) 4)
     (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
-  (let1 fn-env (make-env env)
+  (let* ((fn-env (make-env env))
+         (injection-env (make-env fn-env)))
     (receive (scope name rest) (parse-def-scope exp)
       (when (< (length rest) 2)
         (errorf <vise-error> "Compiler: Bad syntax:~a" exp))
       (append
         (list
-          (make <vsymbol> :exp (car exp) :env env) ;defun
+          (make <vsymbol> :exp (car exp) ;defun
+                :env env :prop `((body-env . ,fn-env)
+                                 (injection-env . ,injection-env)))
           (if (symbol? name) ;name symbol
             (rlet1 sym (make <vsymbol> :exp name :env env)
               (env-add-symbol env sym scope)
               (attr-push! (env-find-data env sym) 'function))
             name)
           (constract-proc-args fn-env (car rest))) ;args
-        (parse-body fn-env (cdr rest))))))  ;body
+        (parse-body injection-env (cdr rest))))))  ;body
 
 (define (expand-symbol-bind sym init scope env)
   (define (to-vsymbol sym)
@@ -238,7 +241,7 @@
     (append
       (list
         (make <vsymbol> :exp (car exp)  ;lambda
-              :env env :prop `((lambda-env . ,lambda-env)
+              :env env :prop `((body-env . ,lambda-env)
                                (injection-env . ,injection-env)))
         (constract-proc-args lambda-env (cadr exp))) ;args
       (map ;body
