@@ -553,6 +553,22 @@
              ","))
   (display "}"))
 
+(define-vise-renderer (augroup form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (display "augroup ")
+  (let1 next (if (vsymbol? (cadr form))
+               (begin
+                 (display (cadr form))
+                 (cddr form))
+               (cdr form))
+    (add-new-line)
+    (add-indent
+      (for-each
+        (pa$ vise-render 'stmt)
+        next))
+    (add-new-line)
+    (print "augroup END")))
+
 ;;------------------------------------------------------------
 ;; Operators
 ;;

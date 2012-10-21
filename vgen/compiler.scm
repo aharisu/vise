@@ -330,7 +330,7 @@
                  (caadr form)
                  (loop (cadadr form))))
              (map loop (cddr form)))]
-          [(while begin and or quasiquote unquote unquote-splicing)
+          [(while begin and or quasiquote unquote unquote-splicing augroup)
            (append
              (cons (car form) '()) ;name
              (map loop (cdr form)))]
@@ -369,7 +369,7 @@
         (list (car exp) (cadr exp)
               (find-tail-exp action (caddr exp)))]
        [(return) (find-tail-exp action (cadr exp))]
-       [(while) exp]
+       [(while augroup) exp]
        [(quasiquote) exp] ;;TODO
        [(try)
         `(,(car exp)

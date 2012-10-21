@@ -23,6 +23,12 @@
         (for-each
           (pa$ check-expression nest-quasiquote)
           (cdr exp))]
+       [(augroup)
+        (unless (vsymbol? (cadr exp))
+          (check-expression nest-quasiquote (cadr exp)))
+        (for-each
+          (pa$ check-expression nest-quasiquote)
+          (cddr exp))]
        [(list-func)
         (check-expression nest-quasiquote (caddr exp))
         (check-expression nest-quasiquote (cadddr exp))]

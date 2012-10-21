@@ -28,7 +28,7 @@
        [(set!) (expand-set! env parent exp)]
        [(let* let letrec) (expand-let env parent exp)]
        [(dolist) (expand-dolist env parent exp)]
-       [(while begin and or quasiquote unquote unquote-splicing)
+       [(while begin and or quasiquote unquote unquote-splicing augroup)
         (cons 
           (make <vsymbol> :exp (car exp) :env env
                 :debug-info (debug-source-info exp))
