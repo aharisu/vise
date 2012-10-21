@@ -27,6 +27,8 @@
    (exp :init-keyword :exp)
    (attr :init-value '())
    (prop :init-keyword :prop  :init-value '())
+   (parent :init-keyword :parent :init-value #f)
+   (debug-info :init-keyword :debug-info :init-value #f)
    )
   )
 
@@ -254,9 +256,21 @@
     set
     (cons obj set)))
 
+
 ;;----------
 ;;Compile
 ;;----------
+
+(define (vise-error msg . obj)
+  (let1 obj (map
+              (lambda (obj)
+                (if-let1 info (or (debug-source-info obj)
+                                (and (pair? obj) (is-a? (car obj) <vexp>) (slot-ref (car obj) 'debug-info)))
+                  (format "file:~a line:~a form:~a" (car info) (cadr info) obj)
+                  obj))
+              obj)
+    (apply errorf <vise-error> msg obj)))
+
 
 (define (sexp-traverse form-list hook)
   (define (loop form)

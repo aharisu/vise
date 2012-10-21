@@ -111,6 +111,7 @@
                       (set! has-tail-recursion? #t)
                       (expand-expression
                         injection-env 
+                        '()
                         `(begin 
                            (set! recursion #t)
                            ,@(map 

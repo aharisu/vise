@@ -31,14 +31,14 @@
        ;;TODO
        #;[(unquote unquote-splicing)
         (if (zero? nest-quasiquote)
-          (errorf <vise-error> "Illegal ~a" (car exp))
+          (vise-error "Illegal ~a" (car exp))
           (for-each
             (pa$ check-expression (- nest-quasiquote 1))
             (cdr exp)))]
        [(dict) (check-dict nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
-     (errorf <vise-error> "Compiler: Syntax error:~a" exp)]))
+     (vise-error "Compiler: Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol)
   (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
@@ -59,14 +59,15 @@
                       (string=? "w:" prefix)
                       (string=? "b:" prefix))))
                 (string-scan symbol #\#)) ;refer name space?
-        (errorf <vise-error> "Compiler: ~a reference does not exist" vsymbol)))))
+        (vise-error "Compiler: ~a reference does not exist.~a" 
+                    vsymbol (@ vsymbol.parent))))))
 
 (define (check-defun nest-quasiquote exp)
   (unless (vsymbol? (cadr exp))
-    (errorf <vise-error> "Illegal argument:~a" exp))
+    (vise-error "Illegal argument:~a" exp))
   (let1 modify (cadddr exp)
     (unless (or (eq? modify :normal) (eq? modify :dict) (eq? modify :range))
-      (errorf <vise-error> "Illegal function modifier:~a" modify)))
+      (vise-error "Illegal function modifier:~a" modify)))
   (check-fun nest-quasiquote (caddr exp) (cddddr exp)))
 
 (define (check-symbol-bind sym form)
@@ -77,12 +78,12 @@
          (cond
            ((eq? (car sym) :rest)
             (unless (and (not (null? (cdr sym))) (null? (cddr sym)))
-              (errorf <vise-error> "Illegal :rest argument:~a ~a" (car sym) form)))
+              (vise-error "Illegal :rest argument:~a ~a" (car sym) form)))
            ((not (vsymbol? (car sym))) 
-            (errorf <vise-error> "Illegal argument:~a ~a" (car sym) form)))
+            (vise-error "Illegal argument:~a ~a" (car sym) form)))
          (loop (cdr sym)))))
     ((not (vsymbol? sym))
-     (errorf <vise-error> "Illegal argument:~a ~a" sym form))))
+     (vise-error "Illegal argument:~a ~a" sym form))))
 
 (define (check-defvar  nest-quasiquote exp)
   (check-symbol-bind (cadr exp) exp)
@@ -93,7 +94,7 @@
 
 (define (check-fun nest-quasiquote args body)
   (define (err msg related-exp)
-    (errorf <vise-error> "~a:~a" msg related-exp))
+    (vise-error "~a:~a" msg related-exp))
   ;;check args
   (let loop ((arg-cell args)
              (set '()))
@@ -124,9 +125,9 @@
 (define (check-set! nest-quasiquote exp)
   (let1 var (cadr exp)
     (unless (vsymbol? var)
-      (errorf <vise-error> "Illegal argument:~a" exp))
+      (vise-error "Illegal argument:~a" exp))
     (unless (allow-rebound? var)
-      (errorf <vise-error> "It is '~a that Can not rebound: ~a" var exp))
+      (vise-error "It is '~a that Can not rebound: ~a" var exp))
     (check-expression nest-quasiquote var))
   (check-expression nest-quasiquote (caddr exp)))
 
@@ -146,7 +147,7 @@
     (cadr exp))
   ;;check body
   (when (null? (cddr exp))
-    (errorf <vise-error> "Nothing let body: ~a" exp))
+    (vise-error "Nothing let body: ~a" exp))
   (for-each
     (pa$ check-expression nest-quasiquote)
     (cddr exp)))
@@ -206,7 +207,7 @@
   (for-each
     (lambda (item)
       (unless (vsymbol? (car item))
-        (errorf <vise-error> "Illegal dictionary key:~a ~a" (car item) exp))
+        (vise-error "Illegal dictionary key:~a ~a" (car item) exp))
       (check-expression nest-level (cadr item)))
     (cdr exp)))
 

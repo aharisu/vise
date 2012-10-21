@@ -93,21 +93,21 @@
 (define (ensure-expr-ctx form ctx)
   (unless (expr-ctx? ctx)
     (if (stmt-ctx? ctx)
-      (error "vise: statment appears in an statment context:" form)
-      (error "vise: statment appears in a toplevel context:" form))))
+      (vise-error "vise: statment appears in an statment context:~a" form)
+      (vise-error "vise: statment appears in a toplevel context:~a" form))))
 
 (define (ensure-stmt-ctx form ctx)
   (unless (stmt-ctx? ctx)
     (if (expr-ctx? ctx)
-      (error "vise: statment appears in an expression context:" form)
-      (error "vise: statment appears in a toplevel context:" form))))
+      (vise-error "vise: statment appears in an expression context:~a" form)
+      (vise-error "vise: statment appears in a toplevel context:~a" form))))
 
 (define (ensure-toplevel-ctx form ctx)
   (unless (toplevel-ctx? ctx)
-    (error "vise: form can only appear in toplevel:" form)))
+    (vise-error "vise: form can only appear in toplevel:~a" form)))
 (define (ensure-stmt-or-toplevel-ctx form ctx)
   (unless (or (toplevel-ctx? ctx) (stmt-ctx? ctx))
-    (error "vise: form can only appear in toplevel or statment context:" form)))
+    (vise-error "vise: form can only appear in toplevel or statment context:~a" form)))
 
 ;;------------------------------------------------------------
 ;; Renderer
@@ -132,7 +132,7 @@
      (vise-register-renderer! 'op (lambda (form ctx) . body))]
     [(_ op op2); alias
                  (vise-register-renderer! 'op (or (vise-lookup-macro 'op2)
-                                                (error "unknown vise renderer:" 'op2)))]))
+                                                (vise-error "unknown vise renderer:~a" 'op2)))]))
 
 ;;------------------------------------------------------------
 ;; Syntax
@@ -249,7 +249,7 @@
   (define (find-self-recursion sym init)
     (if (and (list? init) (eq? 'lambda (vexp (car init))))
       (begin (when (not (vsymbol? sym))
-               (errorf <vise-error> "Not allow distribute binding:~a ~a" sym init))
+               (vise-error "Not allow distribute binding:~a ~a" sym init))
         (let1 self-data (env-find-data (@ sym.env) sym)
           (find-symbol-recursion
             (lambda (exp vars)
@@ -334,7 +334,7 @@
     (let1 func-name (symbol->string (gensym "s:let_func"))
       ;;check distribute binding
       (when (any (.$ list? car) (cadr form))
-        (errorf <vise-error> "Expression context let, distribute binding not allow:~a" form))
+        (vise-error "Expression context let, distribute binding not allow:~a" form))
       (add-auto-generate-exp
         func-name
         ;;constract auto generate function
@@ -393,7 +393,7 @@
        (display "):(")
        (vise-render 'expr else)
        (display "))")]
-      [_ (errorf <vise-error> "Expression context if, else clause require:~a" form)])
+      [_ (vise-error "Expression context if, else clause require:~a" form)])
     (match form
       [(_ test then)
        (display "if ")
@@ -516,7 +516,7 @@
            (vim-boxing val)
            val)))
      (display ")")]
-    [_   (error "uneven args for set!:" form)]))
+    [_   (vise-error "uneven args for set!:~a" form)]))
 
 (define-vise-renderer (echo form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
