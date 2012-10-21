@@ -139,23 +139,26 @@
 ;;
 
 (define (render-literal exp ctx)
-  (ensure-expr-ctx exp ctx)
-  (display
-    (cond
-      [(list? exp)
-       (string-append
-         "["
-         (string-join 
-           (map (pa$ vise-render-to-string 'expr) exp) 
-           ",")
-         "]")]
-      [(string? exp) 
-       (string-append
-         "\""
-         (regexp-replace-all #/\"/ exp "\\\\\"")
-         "\"")]
-      [(boolean? exp) (if exp 1 0)]
-      [else exp])))
+  (if (and (or (stmt-ctx? ctx) (toplevel-ctx? ctx)) (string? exp))
+    (print exp)
+    (begin
+      (ensure-expr-ctx exp ctx)
+      (display
+        (cond
+          [(list? exp)
+           (string-append
+             "["
+             (string-join 
+               (map (pa$ vise-render-to-string 'expr) exp) 
+               ",")
+             "]")]
+          [(string? exp) 
+           (string-append
+             "\""
+             (regexp-replace-all #/\"/ exp "\\\\\"")
+             "\"")]
+          [(boolean? exp) (if exp 1 0)]
+          [else exp])))))
 
 (define-vise-renderer (quote form ctx)
   (render-literal (cadr form) ctx))
