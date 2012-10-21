@@ -518,13 +518,29 @@
      (display ")")]
     [_   (vise-error "uneven args for set!:~a" form)]))
 
-(define-vise-renderer (echo form ctx)
-  (ensure-stmt-or-toplevel-ctx form ctx)
-  (match form
-    [(_ expr)
-     (display "echo ")
-     (vise-render 'expr expr)
-     (add-new-line)]))
+(define vim-cmd-list '())
+(define-macro (define-vim-cmd op sop)
+  `(begin
+     (set! vim-cmd-list (cons (string->symbol ,sop) vim-cmd-list))
+     (define-vise-renderer (,op form ctx)
+       (ensure-stmt-or-toplevel-ctx form ctx)
+       (match form
+         [(_ expr)
+          (display ,sop)
+          (display " ")
+          (vise-render 'expr expr)
+          (add-new-line)]))))
+
+(define-vim-cmd echo "echo")
+(define-vim-cmd echon "echon")
+(define-vim-cmd echohl "echohl")
+(define-vim-cmd echomsg "echomsg")
+(define-vim-cmd execute "execute")
+(define-vim-cmd normal "normal")
+(define-vim-cmd tag "tag")
+;;TODO
+;(define-vim-cmd keymap "key")
+
 
 (define-vise-renderer (dict form ctx)
   (ensure-expr-ctx form ctx)
@@ -569,6 +585,8 @@
 (define-nary - "-")
 (define-nary * "*")
 (define-nary / "/")
+(define-nary string-append ".")
+
 
 (define-nary and "&&")
 (define-nary or  "||")
@@ -611,6 +629,65 @@
 ;;TODO
 (define-binary +=      "+=")
 (define-binary -=      "-=")
+
+(define-binary is "is")
+(define-binary isnot "isnot")
+
+(define-binary |==#| "==#")
+(define-binary |!=#| "!=#")
+(define-binary |>#| ">#")
+(define-binary |>=#| ">=#")
+(define-binary |<#| "<#")
+(define-binary |<=#| "<=#")
+
+(define-binary |==?| "==?")
+(define-binary |!=?| "!=?")
+(define-binary |>?| ">?")
+(define-binary |>=?| ">=?")
+(define-binary |<?| "<?")
+(define-binary |<=?| "<=?")
+
+(define-binary |=~| "=~")
+(define-binary |=~#| "=~#")
+(define-binary |=~?| "=~?")
+(define-binary |!~| "!~")
+(define-binary |!~#| "!~#")
+(define-binary |!~?| "!~?")
+
+(define-vise-renderer (ref form ctx)
+  (ensure-expr-ctx form ctx)
+  (match form
+    [(_ a i1 . i2)
+     (vise-render 'expr a)
+     (display "[")
+     (vise-render 'expr i1)
+     (display "]")
+     (for-each
+       (lambda (i)
+         (display "[")
+         (vise-render 'expr i)
+         (display "]"))
+       i2)]))
+
+(define-vise-renderer (subseq form ctx)
+  (ensure-expr-ctx form ctx)
+  (match form
+    [(_ seq)
+     (vise-render 'expr seq)
+     (display "[:]")]
+    [(_ seq s)
+     (vise-render 'expr seq)
+     (display "[")
+     (vise-render 'expr s)
+     (display ":]")]
+    [(_ seq s e)
+     (vise-render 'expr seq)
+     (display "[")
+     (vise-render 'expr s)
+     (display ":")
+     (vise-render 'expr e)
+     (display "]")]))
+
 
 ;;
 ;;

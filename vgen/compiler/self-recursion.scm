@@ -91,9 +91,12 @@
           (list (car exp) (cadr exp)
                 (find-tail-exp action (caddr exp)))]
          [(return) (find-tail-exp action (cadr exp))]
-         [(while echo) exp]
+         [(while) exp]
          [(quasiquote) exp] ;;TODO
-         [else (action exp)])]
+         [else 
+           (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+             exp
+             (action exp))])]
       [else (action exp)]))
 
   (let ([args (filter-map 
