@@ -351,11 +351,53 @@
 
   (map loop form-list))
 
+(define (find-tail-exp action exp)
+  (cond
+    [(list? exp)
+     (case (get-symbol (car exp))
+       [(defun let lambda begin and or) 
+        `(,@(drop-right exp 1)
+           ,(find-tail-exp action (car (last-pair (cddr exp)))))]
+       [(if)
+        (if (null? (cdddr exp))
+          (list (car exp) (cadr exp)
+                (find-tail-exp action (caddr exp))) ;then
+          (list (car exp) (cadr exp)
+                (find-tail-exp action (caddr exp)) ;then
+                (find-tail-exp action (cadddr exp))))] ;else
+       [(set!)
+        (list (car exp) (cadr exp)
+              (find-tail-exp action (caddr exp)))]
+       [(return) (find-tail-exp action (cadr exp))]
+       [(while) exp]
+       [(quasiquote) exp] ;;TODO
+       [(try)
+        `(,(car exp)
+           ,(find-tail-exp action (cadr exp))
+           ,@(map
+               (lambda (clause)
+                 (if (< 1 (length clause))
+                   `(,@(drop-right clause 1)
+                      ,(find-tail-exp action (car (last-pair clause))))
+                   clause))
+               (cddr exp)))]
+       [(list-func)
+        (list (car exp)
+              (cadr exp)
+              (caddr exp)
+              (find-tail-exp action (cadddr exp)))]
+       [else 
+         (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+           exp
+           (action exp))])]
+    [else (action exp)]))
+
 ;(add-load-path ".." :relative)
 (include "compiler/read.scm")
 (include "compiler/load.scm")
 (include "compiler/expand.scm")
 (include "compiler/check.scm")
+(include "compiler/add-return.scm")
 (include "compiler/render.scm")
 
 (include "compiler/self-recursion.scm")
@@ -377,6 +419,7 @@
          (exp-list ((.$
                       (pa$ vise-phase-render out-port)
                       vise-phase-self-recursion
+                      vise-phase-add-return
                       vise-phase-check
                       (pa$ vise-phase-expand global-env)
                       vise-phase-load 

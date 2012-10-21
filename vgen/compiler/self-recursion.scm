@@ -73,32 +73,6 @@
 ;;; ;;;;;
 ;;  (loop 10))
 (define (self-recursion-optimize sym init lambda?)
-  (define (find-tail-exp action exp)
-    (cond
-      [(list? exp)
-       (case (get-symbol (car exp))
-         [(defun let lambda begin and or) 
-          `(,@(drop-right exp 1)
-             ,(find-tail-exp action (car (last-pair (cddr exp)))))]
-         [(if)
-          (if (null? (cdddr exp))
-            (list (car exp) (cadr exp)
-                  (find-tail-exp action (caddr exp))) ;then
-            (list (car exp) (cadr exp)
-                  (find-tail-exp action (caddr exp)) ;then
-                  (find-tail-exp action (cadddr exp))))] ;else
-         [(set!)
-          (list (car exp) (cadr exp)
-                (find-tail-exp action (caddr exp)))]
-         [(return) (find-tail-exp action (cadr exp))]
-         [(while) exp]
-         [(quasiquote) exp] ;;TODO
-         [else 
-           (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
-             exp
-             (action exp))])]
-      [else (action exp)]))
-
   (let ([args (filter-map 
                 (lambda (arg) (and (vsymbol? arg) (@ arg.exp)))
                 ((if lambda? cadr caddr) init))]
