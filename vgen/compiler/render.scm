@@ -390,6 +390,27 @@
            (add-new-line)
            (print "endif")))])))
 
+(define-vise-renderer (try form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (print "try")
+  (add-indent (vise-render ctx (cadr form)))
+  (add-new-line)
+  (for-each
+    (lambda (clause)
+      (if (string? (car clause))
+        (begin
+          (display "catch ")
+          (vise-render 'expr (car clause)))
+        (if (eq? (vexp (car clause)) 'else)
+          (display "catch")
+          (display "finally")))
+      (add-new-line)
+      (add-indent
+        (vise-render 'stmt `(begin ,@(cdr clause)))))
+    (cddr form))
+  (add-new-line)
+  (print "endtry"))
+
 (define-vise-renderer (dolist form ctx)
   (ensure-stmt-or-toplevel-ctx form ctx)
   (render-symbol-bind (caadr form) (cadadr form) #t)

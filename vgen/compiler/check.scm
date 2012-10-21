@@ -36,6 +36,7 @@
             (pa$ check-expression (- nest-quasiquote 1))
             (cdr exp)))]
        [(dict) (check-dict nest-quasiquote exp)]
+       [(try) (check-try nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
      (vise-error "Compiler: Syntax error:~a" exp)]))
@@ -210,6 +211,21 @@
         (vise-error "Illegal dictionary key:~a ~a" (car item) exp))
       (check-expression nest-level (cadr item)))
     (cdr exp)))
+
+(define (check-try nest-level exp)
+  (check-expression nest-level (cadr exp))
+  (for-each
+    (lambda (clause)
+      (unless (list? clause)
+        (vise-error "Syntax error:~a" clause))
+      (unless (or (and (vsymbol? (car clause)) 
+                    (or* eq? (slot-ref (car clause) 'exp) 'else 'finally))
+                    (string? (car clause)))
+        (vise-error "Syntax error. Require catch string or 'finally, 'else:~a" clause))
+      (for-each
+        (pa$ check-expression nest-level)
+        (cdr clause)))
+    (cddr exp)))
 
 (define (check-apply nest-level exp)
   (for-each

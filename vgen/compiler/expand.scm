@@ -41,6 +41,7 @@
           (expand-expression env exp (caddr exp))
           (expand-expression env exp (cadddr exp)))]
        [(dict) (expand-dict env parent exp)]
+       [(try) (expand-try env parent exp)]
        [else (expand-apply env parent exp)])]
     [(symbol? exp) (expand-refer-symbol env parent exp)]
     [else exp]))
@@ -365,6 +366,17 @@
              (expand-expression env exp init)))
          sym init)]
       [_ (vise-error "dict format error")])))
+
+(define (expand-try env parent exp)
+  `(,(make <vsymbol> :exp (car exp) :env env ;dolist 
+           :debug-info (debug-source-info exp))
+     ,(expand-expression env exp (cadr exp))
+     ,@(map
+         (lambda (clause) 
+           (if (list? clause)
+             (map (pa$ expand-expression env clause) clause)
+             clause))
+         (cddr exp))))
 
 (define (expand-apply env parent exp)
   (let1 e (env-find-exp env (car exp))
