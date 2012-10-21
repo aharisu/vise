@@ -327,14 +327,14 @@
 (define-vise-renderer (let form ctx)
   (define (all-ref-only? vars)
     (every
-      (lambda (var)
-        (if (list? var)
-          (errorf <vise-error> "Expression context let, distribute binding not allow:~a" form)
-          (has-attr? (env-find-data (@ var.env) var) 'ref-only)))
+      (lambda (var) (has-attr? (env-find-data (@ var.env) var) 'ref-only))
       vars))
 
   (if (expr-ctx? ctx)
     (let1 func-name (symbol->string (gensym "s:let_func"))
+      ;;check distribute binding
+      (when (any (.$ list? car) (cadr form))
+        (errorf <vise-error> "Expression context let, distribute binding not allow:~a" form))
       (add-auto-generate-exp
         func-name
         ;;constract auto generate function

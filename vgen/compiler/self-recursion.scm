@@ -77,7 +77,7 @@
     (cond
       [(list? exp)
        (case (get-symbol (car exp))
-         [(defun lambda begin and or) 
+         [(defun let lambda begin and or) 
           `(,@(drop-right exp 1)
              ,(find-tail-exp action (car (last-pair (cddr exp)))))]
          [(if)
