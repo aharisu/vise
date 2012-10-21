@@ -648,19 +648,19 @@
 (define-binary |!~?| "!~?")
 
 (define-vise-renderer (ref form ctx)
+  (define (render-index i) 
+    (display "[")
+    (let1 i (if (and (list? i) (eq? 'quote (vexp (car i))))
+              (x->string (cadr i))
+              i)
+      (vise-render 'expr i))
+    (display "]"))
   (ensure-expr-ctx form ctx)
   (match form
     [(_ a i1 . i2)
      (vise-render 'expr a)
-     (display "[")
-     (vise-render 'expr i1)
-     (display "]")
-     (for-each
-       (lambda (i)
-         (display "[")
-         (vise-render 'expr i)
-         (display "]"))
-       i2)]))
+     (render-index i1)
+     (for-each render-index i2)]))
 
 (define-vise-renderer (subseq form ctx)
   (ensure-expr-ctx form ctx)
