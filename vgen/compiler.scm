@@ -248,8 +248,7 @@
 ;;
 ;;set
 (define (set-exists set obj)
-  (any (pa$ equal? (if (is-a? obj <vexp>) (@ obj.exp) obj))
-       set))
+  (any (.$ (pa$ equal? (vexp obj)) vexp) set))
 
 (define (set-cons set obj)
   (if (set-exists set obj)
