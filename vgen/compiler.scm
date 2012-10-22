@@ -339,6 +339,14 @@
              (cadr form) ;function
              (loop (caddr form))
              (loop (cadddr form)))]
+          [(autocmd)
+           (list
+             (car form) ;autocmd
+             (cadr form);group
+             (caddr form) ;events
+             (cadddr form) ;pat
+             (car (cddddr form)) ;nest
+             (loop (cadr (cddddr form))))] ;cmd
           [(dict)
            (append
              (cons (car form) '())
@@ -368,7 +376,7 @@
         (list (car exp) (cadr exp)
               (find-tail-exp action (caddr exp)))]
        [(return) (find-tail-exp action (cadr exp))]
-       [(while augroup) exp]
+       [(while augroup autocmd) exp]
        [(quasiquote) exp] ;;TODO
        [(try)
         `(,(car exp)

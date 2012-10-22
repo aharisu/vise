@@ -42,6 +42,7 @@
           (expand-expression env exp (cadddr exp)))]
        [(dict) (expand-dict env parent exp)]
        [(try) (expand-try env parent exp)]
+       [(autocmd) (expand-autocmd env parent exp)]
        [else (expand-apply env parent exp)])]
     [(symbol? exp) (expand-refer-symbol env parent exp)]
     [else exp]))
@@ -377,6 +378,33 @@
              (map (pa$ expand-expression env clause) clause)
              clause))
          (cddr exp))))
+
+(define (expand-autocmd env parent exp)
+  (define (err)
+    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd).\n~a" exp))
+  (receive (group events pat nest cmd)
+    (match exp
+      [(_ (? symbol? group) (? list? events) pat (? keyword? nest) cmd)
+       (values group events pat nest cmd)]
+      [(_ (? list? events) pat (? keyword? nest) cmd)
+       (values 'default events pat nest cmd)]
+      [(_ (? symbol? group) (? list? events) pat cmd)
+       (values group events pat :normal cmd)]
+      [(_ (? list? events) pat cmd)
+       (values 'default events pat :normal cmd)]
+      [else (err)])
+    (let1 pat (cond
+                [(string? pat) pat]
+                [(symbol? pat) (symbol->string pat)]
+                [else (err)])
+      (list
+        (make <vsymbol> :exp (car exp) :env env ;autocmd
+              :debug-info (debug-source-info exp))
+        (expand-expression env exp group)
+        (map (pa$ expand-expression env exp) events)
+        pat
+        nest
+        (expand-expression env exp cmd)))))
 
 (define (expand-apply env parent exp)
   (let1 e (env-find-exp env (car exp))

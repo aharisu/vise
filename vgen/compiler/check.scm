@@ -43,6 +43,7 @@
             (cdr exp)))]
        [(dict) (check-dict nest-quasiquote exp)]
        [(try) (check-try nest-quasiquote exp)]
+       [(autocmd) (check-autocmd nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
      (vise-error "Compiler: Syntax error:~a" exp)]))
@@ -232,6 +233,14 @@
         (pa$ check-expression nest-level)
         (cdr clause)))
     (cddr exp)))
+
+(define (check-autocmd nest-level exp)
+  (define (err)
+    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd).\n~a" exp))
+  (unless (vsymbol? (cadr exp)) (err)) ;group
+  (unless (every vsymbol? (caddr exp)) (err)) ;events 
+  (unless (or* eq? (car (cddddr exp)) :nested :normal) (err)) ;:nested
+  (check-expression nest-level (cadr (cddddr exp)))) ;cmd
 
 (define (check-apply nest-level exp)
   (for-each

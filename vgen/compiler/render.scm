@@ -564,6 +564,24 @@
     (add-new-line)
     (print "augroup END")))
 
+(define-vise-renderer (autocmd form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (display "autocmd ")
+  (unless (eq? 'default (vexp (cadr form)))
+    (display (vexp (cadr form)))
+    (display " "))
+  (display
+    (string-join
+      (map (.$ symbol->string vexp) (caddr form))
+      ","))
+  (display " ")
+  (display (cadddr form))
+  (display " ")
+  (unless (eq? :normal (vexp (car (cddddr form))))
+    (display "nested "))
+  (vise-render 'stmt (cadr (cddddr form)))
+  (add-new-line))
+
 ;;------------------------------------------------------------
 ;; Operators
 ;;
