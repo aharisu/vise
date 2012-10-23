@@ -6,16 +6,21 @@
     (unless (assoc sym l)
       (auto-generate-exp (acons sym exp l)))))
 
-(define (vise-phase-render out-port exp)
-  (let loop ((exp exp))
+(define (vise-phase-render exp)
+  (let loop ((exp exp)
+             (acc '()))
     (parameterize ([auto-generate-exp '()])
-      (let1 str-port (make-vise-output-port (open-output-string))
-        (for-each
-          (cut vise-render 'toplevel <> str-port)
-          exp)
-        (unless (null? (auto-generate-exp))
-          (loop (map cdr (auto-generate-exp))))
-        (display (get-output-string (@ str-port.raw)) out-port)))))
+      (let1 ret (append
+                  (map 
+                    (lambda (form)
+                      (let1 str-port (make-vise-output-port (open-output-string))
+                        (vise-render 'toplevel form str-port)
+                        (get-output-string (@ str-port.raw))))
+                    exp)
+                  acc)
+        (if (null? (auto-generate-exp))
+          ret
+          (loop (map cdr (auto-generate-exp)) ret))))))
 
 (define (vise-render ctx exp :optional (out-port (current-output-port)))
   (with-output-to-port

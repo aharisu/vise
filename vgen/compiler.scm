@@ -417,7 +417,7 @@
 
 (define vim-symbol-list (include "vim-function.scm"))
 
-(define (vise-compile in-port)
+(define (vise-compile in-port :optional (out-port (current-output-port)))
   (let* ((global-env (rlet1 env (make-env #f)
                        (hash-table-for-each
                          renderer-table
@@ -425,9 +425,8 @@
                        (for-each
                          (lambda (sym) (env-add-symbol env sym 'syntax))
                          vim-symbol-list)))
-         (out-port (standard-output-port))
          (exp-list ((.$
-                      (pa$ vise-phase-render out-port)
+                      vise-phase-render
                       vise-phase-self-recursion
                       vise-phase-add-return
                       vise-phase-check
@@ -435,7 +434,8 @@
                       vise-phase-load 
                       vise-phase-read)
                     in-port)))
-    (print exp-list)
-    ;(print (get-output-string out-port))
-    ))
+    (with-output-to-port
+      out-port
+      (lambda ()
+        (for-each print exp-list)))))
 
