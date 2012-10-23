@@ -60,13 +60,13 @@
        (attr-push! d 'ref-only)))
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
+                (string=? "@@" symbol)
                 (char-upper-case? (string-ref symbol 0));global command?
-                (and (< 1 (string-length symbol)) ;global or window or buffer scope?
-                  (let1 prefix (substring symbol 0 2)
-                    (or (string=? "g:" prefix)
-                      (string=? "v:" prefix)
-                      (string=? "w:" prefix)
-                      (string=? "b:" prefix))))
+                (and (< 1 (string-length symbol))
+                  ;;Vim embedded symbol?
+                  (or (eq? (string-ref symbol 0) #\&)
+                    ;;global or window or buffer scope?
+                    (or* string=? (substring symbol 0 2) "g:" "v:" "w:" "b:")))
                 (string-scan symbol #\#)) ;refer name space?
         (vise-error "Compiler: ~a reference does not exist.~a" 
                     vsymbol (@ vsymbol.parent))))))

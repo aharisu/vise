@@ -688,6 +688,7 @@
 ;;TODO
 (define-binary +=      "+=")
 (define-binary -=      "-=")
+(define-binary .=      ".=")
 
 (define-binary is "is")
 (define-binary isnot "isnot")
@@ -756,21 +757,25 @@
   (vise-safe-name-friendly (x->string sym)))
 
 (define (vise-safe-name-friendly str)
-  (with-string-io str
-                  (^[] (let loop ([c (read-char)])
-                         (unless (eof-object? c)
-                           (case c
-                             [(#\-) (let1 d (read-char)
-                                      (cond [(eqv? d #\>) (display "_TO") (loop (read-char))]
-                                        [else         (display #\_) (loop d)]))]
-                             [(#\?) (display #\P) (loop (read-char))]
-                             [(#\!) (display #\X) (loop (read-char))]
-                             [(#\<) (display "_LT") (loop (read-char))]
-                             [(#\>) (display "_GT") (loop (read-char))]
-                             [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\= #\. #\/ #\~)
-                              (display #\_)
-                              (display (number->string (char->integer c) 16))
-                              (loop (read-char))]
-                             [else (display c) (loop (read-char))]
-                             ))))))
+  (receive (prefix str) (if (eq? (string-ref str 0) #\&)
+                          (values "&" (substring str 1 (string-length str)))
+                          (values "" str))
+    (string-append
+      prefix
+      (with-string-io str
+                      (^[] (let loop ([c (read-char)])
+                             (unless (eof-object? c)
+                               (case c
+                                 [(#\-) (let1 d (read-char)
+                                          (cond [(eqv? d #\>) (display "_TO") (loop (read-char))]
+                                            [else         (display #\_) (loop d)]))]
+                                 [(#\?) (display #\P) (loop (read-char))]
+                                 [(#\!) (display #\X) (loop (read-char))]
+                                 [(#\<) (display "_LT") (loop (read-char))]
+                                 [(#\>) (display "_GT") (loop (read-char))]
+                                 [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\= #\. #\/ #\~)
+                                  (display #\_)
+                                  (display (number->string (char->integer c) 16))
+                                  (loop (read-char))]
+                                 [else (display c) (loop (read-char))]))))))))
 
