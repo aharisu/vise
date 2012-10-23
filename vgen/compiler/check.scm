@@ -44,6 +44,7 @@
        [(dict) (check-dict nest-quasiquote exp)]
        [(try) (check-try nest-quasiquote exp)]
        [(autocmd) (check-autocmd nest-quasiquote exp)]
+       [(vim-cmd) (check-vim-cmd nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
      (vise-error "Compiler: Syntax error:~a" exp)]))
@@ -244,6 +245,17 @@
   (unless (every vsymbol? (caddr exp)) (err)) ;events 
   (unless (or* eq? (car (cddddr exp)) :nested :normal) (err)) ;:nested
   (check-expression nest-level (cadr (cddddr exp)))) ;cmd
+
+(define (check-vim-cmd nest-level exp)
+  (when (< (length exp) 2)
+    (vise-error "Bad syntax. vim-cmd has require command :~a" exp))
+  (unless (and (list? (cadr exp))
+            (eq? (caadr exp) 'quote)
+            (symbol? (cadadr exp)))
+    (vise-error "Bad syntax. vim-cmd has require command symbol :~a" exp))
+  (for-each
+    (pa$ check-expression nest-level)
+    (cddr exp)))
 
 (define (check-apply nest-level exp)
   (for-each
