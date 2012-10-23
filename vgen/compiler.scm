@@ -99,25 +99,28 @@
 ;;;;;
 ;;@param scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
 ;;@param attr {@ set-list}
-(define (vise-gensym sym scope attr) 
-  (let ((prefix (case scope
-                  ((arg) "a:")
-                  ((script) "s:")
-                  ((global) "g:")
-                  ((window) "w:")
-                  ((buffer) "b:")
-                  (else "")))
-        (sym (if (set-exists attr 'func-call)
-               (string-titlecase (x->string sym))
-               (x->string sym))))
-    (if (and (not (eq? scope 'syntax)) (string-null? prefix))
-      (symbol->string 
-        (gensym 
-          (string-append 
-            sym
-            "_")))
-      (string-append prefix (x->string sym)))))
-
+(define (vise-gensym sym scope attr)
+  (cond
+    [(eq? scope 'syntax) (x->string sym)]
+    [(and (eq? scope 'arg) (set-exists attr 'rest)) "a:000"]
+    [else 
+      (let ((prefix (case scope
+                      ((arg) "a:")
+                      ((script) "s:")
+                      ((global) "g:")
+                      ((window) "w:")
+                      ((buffer) "b:")
+                      (else "")))
+            (sym (if (set-exists attr 'func-call)
+                   (string-titlecase (x->string sym))
+                   (x->string sym))))
+        (if (string-null? prefix)
+          (symbol->string
+            (gensym
+              (string-append
+                sym
+                "_")))
+          (string-append prefix (x->string sym))))]))
 
 (define (remove-symbol-prefix symbol)
   (if-let1 ret (string-scan (x->string symbol) ":" 'after)

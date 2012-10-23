@@ -163,9 +163,13 @@
 (define-vise-renderer (defun form ctx)
   (define (gen-args args)
     ($ (cut string-join <> ",")
-      $ map vise-render-identifier 
       $ map (lambda (sym) 
-              (remove-symbol-prefix (get-vim-name (env-find-data (@ sym.env) sym))))
+              (let* ([d (env-find-data (@ sym.env) sym)]
+                     [sym (remove-symbol-prefix (get-vim-name d))])
+                (if (has-attr? d 'rest)
+                  "..."
+                  (vise-render-identifier sym))))
+      $ filter vsymbol? 
       args))
   (define (render-body body)
     (add-indent (vise-render 'stmt `(begin ,@body)))
