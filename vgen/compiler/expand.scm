@@ -153,6 +153,11 @@
     (if (check-lambda-for-list-fnction `(for-each ,proc ,l) proc 1 2)
       `(dolist (,(caadr proc) ,l) ,@(cddr proc))
       `(dolist (val ,l) (,proc val))))
+  ;;length
+  (register-macro
+    env
+    (length seq)
+    `(len ,seq))
   )
 
 (define (constract-proc-args proc-env arg)
