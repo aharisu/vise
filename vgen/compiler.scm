@@ -182,7 +182,7 @@
     #f))
 
 (define (allow-rebound? vsymbol)
-  (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
+  (if-let1 d (and (vsymbol? vsymbol) (env-find-data (@ vsymbol.env) vsymbol))
     (not (or (eq? (@ d.scope) 'arg) (eq? (@ d.scope) 'syntax)))
     #t))
 

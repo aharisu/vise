@@ -136,8 +136,8 @@
 
 (define (check-set! nest-quasiquote exp)
   (let1 var (cadr exp)
-    (unless (vsymbol? var)
-      (vise-error "Illegal argument:~a" exp))
+    ;(unless (vsymbol? var)
+    ;  (vise-error "Illegal argument:~a" exp))
     (unless (allow-rebound? var)
       (vise-error "It is '~a that Can not rebound: ~a" var exp))
     (check-expression nest-quasiquote var))

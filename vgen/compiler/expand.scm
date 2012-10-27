@@ -292,7 +292,8 @@
          (rlet1 sym (make <vsymbol> :exp sym :env env)
            (if-let1 d (env-find-data env sym)
              (@inc! d.set-count)))
-         sym)
+         ;;TODO ref
+         (expand-expression env exp sym))
        (expand-expression env exp e))]
     [else (vise-error "Compiler: Bad set! syntax:~a" exp)]))
 

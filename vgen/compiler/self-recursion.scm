@@ -82,8 +82,8 @@
         [has-tail-recursion? #f])
     (let1 exp (find-tail-exp
                 (lambda (exp)
-                  (if (and (list? exp) (not (eq? (vexp (car exp)) 'quote))
-                        (eq? self-data (env-find-data (slot-ref (car exp) 'env) (car exp))))
+                  (if (and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
+                        (vsymbol? (car exp)) (eq? self-data (env-find-data (slot-ref (car exp) 'env) (car exp))))
                     (begin
                       (set! has-tail-recursion? #t)
                       (expand-expression

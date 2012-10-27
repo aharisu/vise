@@ -71,7 +71,7 @@
     (display "call "))
   (display 
     (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
-          (sym (vim-ref-symbol (car form)))
+          (sym (vise-render-to-string 'expr (car form)))
           (d (and (vsymbol? (car form))
                (env-find-data (slot-ref (car form) 'env) (car form)))))
       (cond
