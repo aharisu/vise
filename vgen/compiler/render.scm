@@ -66,6 +66,12 @@
           (vim-unboxing sym)
           sym)))))
 
+(define dict-type-symbol #f)
+(define (get-dict-type-symbol)
+  (unless dict-type-symbol
+    (set! dict-type-symbol (gensym "s:dict_type_")))
+  dict-type-symbol)
+
 (define (render-func-call ctx form)
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (display "call "))
@@ -80,8 +86,8 @@
         [(has-attr? d 'lambda) (string-append sym ".func" params)]
         [else 
           (add-auto-generate-exp 'dict-type
-                                 '(defvar s:dict_type (type (dict))))
-          #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
+                                 `(defvar ,(get-dict-type-symbol) (type (dict))))
+          #`"(type(,sym)==,(get-dict-type-symbol)) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
 
