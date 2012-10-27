@@ -1,9 +1,28 @@
 
-(define (vise-phase-check exp-list)
+(define (vise-phase-check global exp-list)
+  (check-env global)
   (for-each
     (pa$ check-expression 0)
     exp-list)
   exp-list)
+
+(define (check-env env)
+  (let1 l (filter-map
+            (lambda (sym&d) 
+              (and (or* eq? (slot-ref (cdr sym&d) 'scope) 'script 'global 'window 'buffer)
+                (cons (vise-gensym (car sym&d) (slot-ref (cdr sym&d) 'scope) '()) (car sym&d))))
+            (@ env.symbols))
+    (for-each
+      (lambda (s1)
+        (for-each
+          (lambda (s2)
+            (when (and (not (eq? s1 s2)) ;自分自身ではないか?
+                    (string=? (car s1) (car s2)) ;意味が同じか?
+                    (not (eq? (cdr s1) (cdr s2)))) ;表記が異なるか?
+              (vise-error "Duplicate symbol of the same meaning: ~a and ~a" (cdr s1) (cdr s2))))
+          l))
+      l))
+  (for-each check-env (@ env.children)))
 
 (define (check-expression nest-quasiquote exp)
   (cond 
@@ -67,7 +86,7 @@
                   (or (eq? (string-ref symbol 0) #\&)
                     ;;global or window or buffer scope?
                     (or* string=? (substring symbol 0 2) "g:" "v:" "w:" "b:")))
-                (string-scan symbol #\#)) ;refer name space?
+                (cmd-symbol? symbol));refer name space?
         (vise-error "Compiler: ~a reference does not exist.~a" 
                     vsymbol (@ vsymbol.parent))))))
 
@@ -231,7 +250,7 @@
         (vise-error "Syntax error:~a" clause))
       (unless (or (and (vsymbol? (car clause)) 
                     (or* eq? (slot-ref (car clause) 'exp) 'else 'finally))
-                    (string? (car clause)))
+                (string? (car clause)))
         (vise-error "Syntax error. Require catch string or 'finally, 'else:~a" clause))
       (for-each
         (pa$ check-expression nest-level)

@@ -96,31 +96,35 @@
     (rlet1 name (vise-gensym (@ env-data.symbol) (@ env-data.scope) (@ env-data.attr))
       (@! env-data.vim-name name))))
 
+(define (cmd-symbol? symbol)
+  (string-scan (x->string (vexp symbol)) #\#))
+
+
 ;;;;;
 ;;@param scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
 ;;@param attr {@ set-list}
 (define (vise-gensym sym scope attr)
   (cond
-    [(eq? scope 'syntax) (x->string sym)]
+    [(or (eq? scope 'syntax) (cmd-symbol? sym)) (x->string sym)]
     [(and (eq? scope 'arg) (set-exists attr 'rest)) "a:000"]
     [else 
       (let ((prefix (case scope
-                      ((arg) "a:")
-                      ((script) "s:")
-                      ((global) "g:")
-                      ((window) "w:")
-                      ((buffer) "b:")
-                      (else "")))
-            (sym (if (set-exists attr 'func-call)
+                      ((arg) #\a)
+                      ((script) #\s)
+                      ((global) #\g)
+                      ((window) #\w)
+                      ((buffer) #\b)
+                      (else #f)))
+            (name (if (set-exists attr 'func-call)
                    (string-titlecase (x->string sym))
                    (x->string sym))))
-        (if (string-null? prefix)
-          (symbol->string
-            (gensym
-              (string-append
-                sym
-                "_")))
-          (string-append prefix (x->string sym))))]))
+        (if prefix
+          (let1 sym (x->string sym)
+            (if (and (< 1 (string-length sym)) (eq? (string-ref name 1) #\:)
+                  (eq? (string-ref name 0) prefix))
+              name 
+              (string-append (x->string prefix) ":" name)))
+          (symbol->string (gensym (string-append name "_")))))]))
 
 (define (remove-symbol-prefix symbol)
   (if-let1 ret (string-scan (x->string symbol) ":" 'after)
@@ -432,7 +436,7 @@
                       vise-phase-render
                       vise-phase-self-recursion
                       vise-phase-add-return
-                      vise-phase-check
+                      (pa$ vise-phase-check global-env)
                       (pa$ vise-phase-expand global-env)
                       vise-phase-load 
                       vise-phase-read)

@@ -178,13 +178,19 @@
            (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret))))))]
       [else (vise-error "Compiler: Illegal argument:~a" arg)])))
 
-(define (parse-def-scope form)
-  (let1 scope (cadr form)
-    (if (keyword? scope)
-      (if (or (eq? scope :script) (eq? scope :global) (eq? scope :window) (eq? scope :buffer)) 
-        (values (string->symbol (keyword->string scope)) (caddr form) (cdddr form))
-        (vise-error "Compiler: Illegal scope:~a ~a" scope form))
-      (values 'script scope (cddr form)))))
+(define (get-name-scope exp name)
+  (let1 name (symbol->string name)
+    (cond
+      [(or (char-upper-case? (string-ref name 0)) (cmd-symbol? name)) 'cmd]
+      [(and (< 1 (string-length name)) (eq? (string-ref name 1) #\:))
+       (let1 prefix (string-ref name 0)
+         (cond
+           [(eq? prefix #\g) 'global]
+           [(eq? prefix #\s) 'script]
+           [(eq? prefix #\w) 'window]
+           [(eq? prefix #\b) 'buffer]
+           [else (vise-error "Unkown name scope:~a ~a" name exp)]))]
+      [else 'script])))
 
 (define (expand-defun env parent exp)
   (define (parse-body fn-env body)
@@ -202,21 +208,18 @@
     (vise-error "Compiler: Bad syntax:~a" exp))
   (let* ((fn-env (make-env env))
          (injection-env (make-env fn-env)))
-    (receive (scope name rest) (parse-def-scope exp)
-      (when (< (length rest) 2)
-        (vise-error "Compiler: Bad syntax:~a" exp))
-      (append
-        (list
-          (make <vsymbol> :exp (car exp) :env env ;defun
-                :debug-info (debug-source-info exp)
-                :prop `((body-env . ,fn-env) (injection-env . ,injection-env)))
-          (if (symbol? name) ;name symbol
-            (rlet1 sym (make <vsymbol> :exp name :env env)
-              (env-add-symbol env sym scope)
-              (attr-push! (env-find-data env sym) 'function))
-            name)
-          (constract-proc-args fn-env (car rest))) ;args
-        (parse-body injection-env (cdr rest))))))  ;body
+    (append
+      (list
+        (make <vsymbol> :exp (car exp) :env env ;defun
+              :debug-info (debug-source-info exp)
+              :prop `((body-env . ,fn-env) (injection-env . ,injection-env)))
+        (if (symbol? (cadr exp)) ;name symbol
+          (rlet1 sym (make <vsymbol> :exp (cadr exp) :env env)
+            (env-add-symbol env sym (get-name-scope exp (cadr exp)))
+            (attr-push! (env-find-data env sym) 'function))
+          (cadr exp))
+        (constract-proc-args fn-env (caddr exp))) ;args
+      (parse-body injection-env (cdddr exp)))))  ;body
 
 (define (expand-symbol-bind sym init scope env)
   (define (to-vsymbol sym)
@@ -243,14 +246,11 @@
 (define (expand-defvar env parent exp)
   (when (< (length exp) 3)
     (vise-error "Compiler: Bad syntax:~a" exp))
-  (receive (scope name rest) (parse-def-scope exp)
-    (unless (= (length rest) 1)
-      (vise-error "Compiler: Bad syntax:~a" exp))
-    (list
-      (make <vsymbol> :exp (car exp) :env env ;defvar
-                :debug-info (debug-source-info exp))
-      (expand-symbol-bind name (car rest) scope env)
-      (expand-expression env exp (car rest)))))
+  (list
+    (make <vsymbol> :exp (car exp) :env env ;defvar
+          :debug-info (debug-source-info exp))
+    (expand-symbol-bind (cadr exp) (caddr exp) (get-name-scope exp (cadr exp)) env)
+    (expand-expression env exp (caddr exp))))
 
 (define (expand-lambda env parent exp)
   (when (< (length exp) 3)
