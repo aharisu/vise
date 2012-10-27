@@ -365,9 +365,12 @@
   (cond
     [(list? exp)
      (case (get-symbol (car exp))
-       [(defun let lambda begin and or) 
+       [(defun let lambda)
         `(,@(drop-right exp 1)
            ,(find-tail-exp action (car (last-pair (cddr exp)))))]
+       [(begin and or) 
+        `(,@(drop-right exp 1)
+           ,(find-tail-exp action (car (last-pair (cdr exp)))))]
        [(if)
         (if (null? (cdddr exp))
           (list (car exp) (cadr exp)
