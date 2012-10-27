@@ -6,6 +6,7 @@
   (use srfi-1)
   (use srfi-13)
   (use util.list)
+  (use file.util)
 
   (use vgen.util)
   (export-all)
@@ -411,7 +412,7 @@
 
 ;(add-load-path ".." :relative)
 (include "compiler/read.scm")
-(include "compiler/load.scm")
+(include "compiler/include.scm")
 (include "compiler/expand.scm")
 (include "compiler/check.scm")
 (include "compiler/add-return.scm")
@@ -424,7 +425,14 @@
 
 (define vim-symbol-list (include "vim-function.scm"))
 
-(define (vise-compile in-port :optional (out-port (current-output-port)))
+(define (get-file-path in-port)
+  (if (eq? (port-type in-port) 'file)
+    (sys-dirname (port-name in-port))
+    (sys-normalize-pathname "." :absolute #t :expand #t :canonicalize #t)))
+
+(define (vise-compile in-port 
+                      :key (out-port (current-output-port))
+                      (load-path '()))
   (let* ((global-env (rlet1 env (make-env #f)
                        (hash-table-for-each
                          renderer-table
@@ -438,7 +446,7 @@
                       vise-phase-add-return
                       (pa$ vise-phase-check global-env)
                       (pa$ vise-phase-expand global-env)
-                      vise-phase-load 
+                      (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '())))
                       vise-phase-read)
                     in-port)))
     (with-output-to-port
