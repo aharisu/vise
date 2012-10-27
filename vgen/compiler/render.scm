@@ -78,7 +78,10 @@
         [(or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function))
          (string-append sym params)]
         [(has-attr? d 'lambda) (string-append sym ".func" params)]
-        [else #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
+        [else 
+          (add-auto-generate-exp 'dict-type
+                                 '(defvar s:dict_type (type (dict))))
+          #`"(type(,sym)==s:dict_type) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
 
@@ -246,12 +249,11 @@
         (display "let ")
         (display (vim-symbol sym))
         (print " = [0]")))
-    (if (vsymbol? sym) (list sym) sym))
+    (if (list? sym) sym (list sym)))
   ;;cmd
   (display (if for-rendering?  "for " "let "))
   ;;symbols
-  (if (vsymbol? sym)
-    (display (vim-symbol sym))
+  (if (list? sym)
     (begin
       (display "[")
       (let loop ((sym sym))
@@ -262,7 +264,9 @@
           (when (not (or (null? (cdr sym)) (eq? (cadr sym) :rest) (eq? (car sym) :rest)))
             (display ","))
           (loop (cdr sym))))
-      (display "]")))
+      (display "]"))
+    (display (vim-symbol sym)))
+
   ;;binding expr
   (let1 self-rec (find-self-recursion sym init)
     (display (if for-rendering?  " in " " = "))
