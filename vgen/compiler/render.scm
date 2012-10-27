@@ -323,7 +323,7 @@
       vars))
 
   (if (expr-ctx? ctx)
-    (let1 func-name (symbol->string (gensym "s:let_func"))
+    (let1 func-name (gensym "s:let_func")
       ;;check distribute binding
       (when (any (.$ list? car) (cadr form))
         (vise-error "Expression context let, distribute binding not allow:~a" form))
