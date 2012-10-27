@@ -8,7 +8,7 @@
       (set! . ,self-recursion-var)
       (let . ,self-recursion-let))))
 
-(define (self-recursion-defun form loop)
+(define (self-recursion-defun form ctx loop)
   (let1 form (self-recursion-optimize (cadr form) form #f)
     (append
       (list
@@ -16,21 +16,22 @@
         (cadr form) ;name
         (caddr form);args
         (cadddr form));mofier
-      (map loop (cddddr form)))))
+      (map (pa$ loop 'stmt) (cddddr form)))))
 
-(define (self-recursion-var form loop)
+(define (self-recursion-var form ctx loop)
   (list
     (car form)
     (cadr form)
     (let ((sym (cadr form))
           (init (caddr form)))
-      (loop (if (and (vsymbol? sym)
+      (loop 'expr
+            (if (and (vsymbol? sym)
                   (list? init)
                   (eq? 'lambda (vexp (car init))))
               (self-recursion-optimize sym init #t)
               init)))))
 
-(define (self-recursion-let form loop)
+(define (self-recursion-let form ctx loop)
   (append
     (list
       (car form) ;let
@@ -40,13 +41,14 @@
             (car clause)
             (let ((sym (car clause))
                   (init (cadr clause)))
-              (loop (if (and (vsymbol? sym )
+              (loop 'expr 
+                    (if (and (vsymbol? sym )
                           (list? init)
                           (eq? 'lambda (vexp (car init))))
                       (self-recursion-optimize sym init #t)
                       init)))))
         (cadr form)))
-    (map loop (cddr form))))
+    (map (pa$ loop 'stmt) (cddr form))))
 
 
 ;;; original

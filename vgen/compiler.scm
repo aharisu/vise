@@ -279,11 +279,13 @@
     (apply errorf <vise-error> msg obj)))
 
 
+(define-constant traverse-apply-function-hook (gensym))
+
 (define (sexp-traverse form-list hook)
-  (define (loop form)
+  (define (loop ctx form)
     (if (list? form)
       (if-let1 func (assq-ref hook (vexp (car form)))
-        (func form loop)
+        (func form ctx loop)
         (case (vexp (car form))
           [(quote) form]
           [(defun) 
@@ -293,60 +295,74 @@
                (cadr form) ;name
                (caddr form) ;args
                (cadddr form)) ;modifier
-             (map loop (cddddr form)))]
+             (map (pa$ loop 'stmt) (cddddr form)))]
           [(defvar)
            (list
              (car form) ;defvar
              (cadr form) ;name
-             (loop (caddr form)))]
+             (loop 'expr (caddr form)))]
           [(lambda) 
            (append
              (list
                (car form) ;lambda
                (cadr form)) ;args
-             (map loop (cddr form)))]
+             (map (pa$ loop 'stmt) (cddr form)))]
           [(if) 
-           (if (null? (cdddr form))
+           (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+             (if (null? (cdddr form))
+               (list
+                 (car form)
+                 (loop 'expr (cadr form))
+                 (loop cctx (caddr form)))
+               (list
+                 (car form)
+                 (loop 'expr (cadr form))
+                 (loop cctx (caddr form))
+                 (loop cctx (cadddr form)))))]
+          [(return)
+           (if (null? (cdr form))
+             form 
              (list
-               (car form)
-               (loop (cadr form))
-               (loop (caddr form)))
-             (list
-               (car form)
-               (loop (cadr form))
-               (loop (caddr form))
-               (loop (cadddr form))))]
+               (car form) ;return
+               (loop 'expr (cadr form))))]
           [(set!) 
            (list
              (car form);set!
              (cadr form) ;name
-             (loop (caddr form)))]
+             (loop 'expr (caddr form)))]
           [(let)
            (append
              (list
                (car form) ;let
                (map
-                 (lambda (clause) (list (car clause) (loop (cadr clause))))
+                 (lambda (clause) (list (car clause) (loop 'expr (cadr clause))))
                  (cadr form)))
-             (map loop (cddr form)))]
+             (map (pa$ loop 'stmt) (cddr form)))]
           [(dolist)
            (append
              (list
                (car form)
                (list
                  (caadr form)
-                 (loop (cadadr form))))
-             (map loop (cddr form)))]
-          [(while begin and or quasiquote unquote unquote-splicing augroup)
+                 (loop 'expr (cadadr form))))
+             (map (pa$ loop 'stmt) (cddr form)))]
+          [(while)
+           (append
+             (list
+               (car form) ;name
+               (loop 'expr (cadr form)))
+             (map (pa$ loop 'stmt) (cddr form)))]
+          [(begin and or quasiquote unquote unquote-splicing augroup)
            (append
              (cons (car form) '()) ;name
-             (map loop (cdr form)))]
+             (map (pa$ loop (if (or* eq? (vexp (car form)) 'and 'or) 'expr ctx)) 
+                  (cdr form)))]
           [(list-func)
            (list
              (car form) ;list
              (cadr form) ;function
-             (loop (caddr form))
-             (loop (cadddr form)))]
+             (loop 'expr (caddr form))
+             (loop 'expr (cadddr form)))]
           [(autocmd)
            (list
              (car form) ;autocmd
@@ -354,17 +370,20 @@
              (caddr form) ;events
              (cadddr form) ;pat
              (car (cddddr form)) ;nest
-             (loop (cadr (cddddr form))))] ;cmd
+             (loop 'stmt (cadr (cddddr form))))] ;cmd
           [(dict)
            (append
              (cons (car form) '())
              (map
-               (lambda (pair) (list (car pair) (loop (cadr pair))))
+               (lambda (pair) (list (car pair) (loop 'expr (cadr pair))))
                (cdr form)))]
-          [else (map loop form)]))
+          [else 
+            (if-let1 func (assq-ref hook traverse-apply-function-hook)
+              (func form ctx loop)
+              (map (pa$ loop 'expr) form))]))
       form))
 
-  (map loop form-list))
+  (map (pa$ loop 'toplevel) form-list))
 
 (define (find-tail-exp action exp)
   (cond
