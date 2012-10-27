@@ -95,8 +95,8 @@
 (define (ensure-expr-ctx form ctx)
   (unless (expr-ctx? ctx)
     (if (stmt-ctx? ctx)
-      (vise-error "vise: statment appears in an statment context:~a" form)
-      (vise-error "vise: statment appears in a toplevel context:~a" form))))
+      (vise-error "vise: expression appears in an statment context:~a" form)
+      (vise-error "vise: expression appears in a toplevel context:~a" form))))
 
 (define (ensure-stmt-ctx form ctx)
   (unless (stmt-ctx? ctx)
@@ -247,7 +247,9 @@
         (display (vim-symbol sym))
         (print " = [0]")))
     (if (vsymbol? sym) (list sym) sym))
+  ;;cmd
   (display (if for-rendering?  "for " "let "))
+  ;;symbols
   (if (vsymbol? sym)
     (display (vim-symbol sym))
     (begin
@@ -261,11 +263,11 @@
             (display ","))
           (loop (cdr sym))))
       (display "]")))
-  ;;find and mark 
+  ;;binding expr
   (let1 self-rec (find-self-recursion sym init)
-    (display (if for-rendering?  " in " " =("))
+    (display (if for-rendering?  " in " " = "))
     (vise-render 'expr init)
-    (display (if for-rendering?  "" ")"))
+    (display (if for-rendering?  "" ""))
     (add-new-line)
     (unless (null? self-rec)
       (print #`"let ,(vim-symbol sym)[',(vim-symbol sym)'] = ,(vim-symbol sym)"))))
@@ -368,11 +370,11 @@
       [(?: test then else)
        (display "((")
        (vise-render 'expr test)
-       (display ")?(")
-       (vise-render 'expr then)
-       (display "):(")
-       (vise-render 'expr else)
-       (display "))")]
+       (display ")?")
+       (vise-render-expr then)
+       (display " : ")
+       (vise-render-expr else)
+       (display ")")]
       [_ (vise-error "Expression context if, else clause require:~a" form)])
     (match form
       [(_ test then)
@@ -509,9 +511,8 @@
     [(_ var val)
      (display "let ")
      (vise-render 'expr var)
-     (display "=(")
-     (vise-render 'expr val)
-     (display ")")]
+     (display " = ")
+     (vise-render 'expr val)]
     [_   (vise-error "uneven args for set!:~a" form)]))
 
 (define vim-cmd-list '())
@@ -622,17 +623,13 @@
      (match form
        [(_ a)
         (display ,sop)
-        (display "(")
-        (vise-render 'expr a)
-        (display ")")]
+        (vise-render-expr a)]
        [(_ a b)
-        (display "(")
-        (vise-render 'expr a)
-        (display ")")
+        (vise-render-expr a)
+        (display " ")
         (display ,sop)
-        (display "(")
-        (vise-render 'expr b)
-        (display ")")]
+        (display " ")
+        (vise-render-expr b)]
        [(_ a b . x)
         (list* ',op (list ',op a b) x)])))
 
@@ -652,26 +649,24 @@
      (match form
        [(_ a)
         (display ,sop) 
-        (display "(")
-        (vise-render 'expr a)
-        (display ")")])))
+        (vise-render-expr a)])))
 
 (define-unary not    "!")
 (define-unary lognot "~")
 (define-unary &      "&")               ; only unary op
 
-(define-macro (define-binary op sop)
+(define-macro (define-binary op sop :optional (context 'expr))
   `(define-vise-renderer (,op form ctx)
-     (ensure-expr-ctx form ctx)
+     ,(if (eq? context 'expr)
+        '(ensure-expr-ctx form ctx)
+        '(ensure-stmt-or-toplevel-ctx form ctx))
      (match form
        [(_ a b)
-        (display "(")
-        (vise-render 'expr a)
-        (display ")")
+        (vise-render-expr a)
+        (display " ")
         (display ,sop)
-        (display "(")
-        (vise-render 'expr b)
-        (display ")")])))
+        (display " ")
+        (vise-render-expr b) ])))
 
 (define-binary %       "%")
 (define-binary <       "<")
@@ -681,10 +676,9 @@
 (define-binary ==      "==")
 (define-binary !=      "!=")
 
-;;TODO
-(define-binary +=      "+=")
-(define-binary -=      "-=")
-(define-binary .=      ".=")
+(define-binary +=      "+=" 'stmt)
+(define-binary -=      "-=" 'stmt)
+(define-binary .=      ".=" 'stmt)
 
 (define-binary is "is")
 (define-binary isnot "isnot")
@@ -748,6 +742,19 @@
 ;;
 ;;
 ;;Util
+
+(define (funcall? exp)
+  (if (list? exp)
+    (if (or* eq? (vexp (car exp)) 'quote 'ref) 
+      #t
+      #f)
+    #f))
+
+(define (vise-render-expr exp)
+  (let1 funcall? (funcall? exp)
+    (when funcall? (display "("))
+    (vise-render 'expr exp)
+    (when funcall? (display ")"))))
 
 (define (vise-render-identifier sym)
   (vise-safe-name-friendly (x->string sym)))
