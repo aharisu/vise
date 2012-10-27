@@ -142,7 +142,7 @@
 
 (define (render-literal exp ctx)
   (if (and (or (stmt-ctx? ctx) (toplevel-ctx? ctx)) (string? exp))
-    (print exp)
+    (print exp) ;;raw VimScript
     (begin
       (ensure-expr-ctx exp ctx)
       (display
@@ -154,11 +154,7 @@
                (map (pa$ vise-render-to-string 'expr) exp) 
                ",")
              "]")]
-          [(string? exp) 
-           (string-append
-             "\""
-             (regexp-replace-all #/\"/ exp "\\\\\"")
-             "\"")]
+          [(string? exp) (write-to-string exp)]
           [(boolean? exp) (if exp 1 0)]
           [else exp])))))
 
