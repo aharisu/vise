@@ -291,7 +291,6 @@
          (rlet1 sym (make <vsymbol> :exp sym :env env)
            (if-let1 d (env-find-data env sym)
              (@inc! d.set-count)))
-         ;;TODO ref
          (expand-expression env exp sym))
        (expand-expression env exp e))]
     [else (vise-error "Compiler: Bad set! syntax:~a" exp)]))
@@ -426,10 +425,7 @@
                    :exp exp
                    :env env
                    :parent parent)
-    (receive (d outside?) (env-find-data-with-outside-lambda? env sym)
-      (when d
-        (@inc! d.ref-count)
-        (when (and outside? (eq? (@ d.scope) 'local))
-          (attr-push! d 'free))))))
+    (if-let1 d (env-find-data env sym)
+      (@inc! d.ref-count))))
 
 

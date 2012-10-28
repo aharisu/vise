@@ -7,6 +7,16 @@
       (auto-generate-exp (acons sym exp l)))))
 
 (define (vise-phase-render exp)
+  ;;mark free variable
+  (sexp-traverse
+    exp
+    `((,traverse-symbol-ref 
+        . ,(lambda (form ctx loop)
+             (when (vsymbol? form)
+               (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
+                 (when (and d outside? (eq? (@ d.scope) 'local))
+                   (attr-push! d 'free))))
+             form))))
   (let loop ((exp exp)
              (acc '()))
     (parameterize ([auto-generate-exp '()])

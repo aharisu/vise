@@ -301,6 +301,10 @@
 (define-constant traverse-symbol-ref (gensym))
 
 (define (sexp-traverse form hook)
+  (define (call-symbol-ref-hook ctx sym)
+    (if-let1 func (assq-ref hook traverse-symbol-ref)
+      (func sym ctx loop)
+      sym))
   (define (loop ctx form)
     (if (list? form)
       (if-let1 func (assq-ref hook (vexp (car form)))
@@ -347,7 +351,7 @@
           [(set!) 
            (list
              (car form);set!
-             (cadr form) ;name
+             (call-symbol-ref-hook ctx (cadr form)) ;name
              (loop 'expr (caddr form)))]
           [(let)
            (append
@@ -376,6 +380,7 @@
              (cons (car form) '()) ;name
              (map (pa$ loop (if (or* eq? (vexp (car form)) 'and 'or) 'expr ctx)) 
                   (cdr form)))]
+          [(try) form] ;;TODO
           [(list-func)
            (list
              (car form) ;list
@@ -400,9 +405,7 @@
             (if-let1 func (assq-ref hook traverse-apply-function-hook)
               (func form ctx loop)
               (map (pa$ loop 'expr) form))]))
-      (if-let1 func (assq-ref hook traverse-symbol-ref)
-        (func form ctx loop)
-        form)))
+      (call-symbol-ref-hook ctx form)))
 
   (if (list? form)
     (map (pa$ loop 'toplevel) form)
