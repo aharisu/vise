@@ -82,10 +82,10 @@
         [injection-env (assq-ref (slot-ref (car init) 'prop) 'injection-env)]
         [has-tail-recursion? #f])
     (let1 exp (find-tail-exp
-                (lambda (exp)
-                  (if (and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
+                (lambda (exp ctx)
+                  (cond
+                    [(and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
                         (vsymbol? (car exp)) (eq? self-data (env-find-data (slot-ref (car exp) 'env) (car exp))))
-                    (begin
                       (@dec! self-data.ref-count)
                       (set! has-tail-recursion? #t)
                       (expand-expression
@@ -95,10 +95,13 @@
                            (set! recursion #t)
                            ,@(map 
                                (lambda (arg bind) `(set! ,arg ,bind))
-                               args (cdr exp)))))
-                    (list 
-                      (make <vsymbol> :exp 'return :env injection-env)
-                      exp)))
+                               args (cdr exp))))]
+                    [(eq? ctx 'stmt)
+                     (list 
+                       (make <vsymbol> :exp 'return :env injection-env)
+                       exp)]
+                    [else exp]))
+                'expr
                 init)
       (if has-tail-recursion?
         (let1 new-injection-env (env-injection injection-env)

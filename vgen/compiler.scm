@@ -408,49 +408,52 @@
     (map (pa$ loop 'toplevel) form)
     (loop 'toplevel form)))
 
-(define (find-tail-exp action exp)
+(define (find-tail-exp action ctx exp)
   (cond
     [(list? exp)
      (case (get-symbol (car exp))
        [(defun let lambda)
         `(,@(drop-right exp 1)
-           ,(find-tail-exp action (car (last-pair (cddr exp)))))]
+           ,(find-tail-exp action 'stmt (last (cddr exp))))]
        [(begin and or) 
         `(,@(drop-right exp 1)
-           ,(find-tail-exp action (car (last-pair (cdr exp)))))]
+           ,(find-tail-exp action 
+                           (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
+                           (last (cdr exp))))]
        [(if)
-        (if (null? (cdddr exp))
-          (list (car exp) (cadr exp)
-                (find-tail-exp action (caddr exp))) ;then
-          (list (car exp) (cadr exp)
-                (find-tail-exp action (caddr exp)) ;then
-                (find-tail-exp action (cadddr exp))))] ;else
+        (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+          (if (null? (cdddr exp))
+            (list (car exp) (cadr exp)
+                  (find-tail-exp action cctx (caddr exp))) ;then
+            (list (car exp) (cadr exp)
+                  (find-tail-exp action cctx (caddr exp)) ;then
+                  (find-tail-exp action cctx (cadddr exp)))))] ;else
        [(set!)
         (list (car exp) (cadr exp)
-              (find-tail-exp action (caddr exp)))]
-       [(return) (find-tail-exp action (cadr exp))]
+              (find-tail-exp action 'expr (caddr exp)))]
+       [(return) (find-tail-exp action 'stmt (cadr exp))]
        [(while augroup autocmd) exp]
        [(quasiquote) exp] ;;TODO
        [(try)
         `(,(car exp)
-           ,(find-tail-exp action (cadr exp))
+           ,(find-tail-exp action ctx (cadr exp))
            ,@(map
                (lambda (clause)
                  (if (< 1 (length clause))
                    `(,@(drop-right clause 1)
-                      ,(find-tail-exp action (car (last-pair clause))))
+                      ,(find-tail-exp action 'stmt (last clause)))
                    clause))
                (cddr exp)))]
        [(list-func)
         (list (car exp)
               (cadr exp)
               (caddr exp)
-              (find-tail-exp action (cadddr exp)))]
+              (find-tail-exp action 'expr (cadddr exp)))]
        [else 
          (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
            exp
-           (action exp))])]
-    [else (action exp)]))
+           (action exp ctx))])]
+    [else (action exp ctx)]))
 
 ;(add-load-path ".." :relative)
 (include "compiler/read.scm")

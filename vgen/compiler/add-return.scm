@@ -12,16 +12,21 @@
                (let1 env (slot-ref (car form) 'env)
                  `(,@(drop-right form 1)
                     ,(find-tail-exp
-                       (lambda (exp)
-                         (list (make <vsymbol> :exp 'return :env env) exp))
-                       (car (last-pair form))))))
+                       (lambda (exp ctx)
+                         (if (eq? ctx 'stmt)
+                           (list (make <vsymbol> :exp 'return :env env) exp)
+                           exp))
+                       'stmt
+                       (last form)))))
     (if lambda?
       `(,(car ret)
          ,(cadr ret)
-         ,@(map (pa$ loop 'stmt) (cddr ret)))
+         ,@(drop-right (cddr ret) 1)
+         ,(loop 'stmt (last ret)))
       `(,(car ret)
          ,(cadr ret)
          ,(caddr form)
          ,(cadddr form)
-         ,@(map (pa$ loop 'stmt) (cddddr ret))))))
+         ,@(drop-right (cddddr ret) 1)
+         ,(loop 'stmt (last ret))))))
 
