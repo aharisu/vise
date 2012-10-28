@@ -6,7 +6,8 @@
       (defvar . ,lambda-expand-defvar)))
   (sexp-traverse 
     form-list
-    `((,traverse-apply-function-hook . ,lambda-expand-apply-func))))
+    `((return . ,lambda-expand-return)
+      (,traverse-apply-function-hook . ,lambda-expand-apply-func))))
 
 (define (lambda-expand-let form ctx loop)
   (append
@@ -31,8 +32,21 @@
     (let1 d (env-find-data (@ sym.env) sym)
       (@! d.prop (cons (cons 'init-expr init) (@ d.prop))))))
 
+(define (lambda-expand-return form ctx loop)
+  (cond
+    [(null? (cdr form)) form]
+    [(list? (cadr form))
+     (receive (expansion? exp) (lambda-expansion (cadr form) 'stmt loop)
+       (if expansion?
+         exp
+         (list (car form) exp)))]
+    [else (list (car form) (loop 'expr (cadr form)))]))
 
 (define (lambda-expand-apply-func form ctx loop)
+  (receive (expansion? form) (lambda-expansion form ctx loop)
+    form))
+
+(define (lambda-expansion form ctx loop)
   (define (gen-let-clause env args init)
     (let* ([rest? (and (not (null? args))
                     (let1 last (last args)
@@ -92,20 +106,24 @@
   (let* ([sym (car form)]
          [env (and (vsymbol? sym) (slot-ref sym 'env))]
          [d (and (vsymbol? sym) (env-find-data env sym))])
-    (if (and d (has-attr? d 'lambda)
-          (zero? (@ d.set-count)) (= 1 (@ d.ref-count)))
+    (if (and (eq? ctx 'stmt) d (has-attr? d 'lambda) (zero? (@ d.set-count)) (= 1 (@ d.ref-count)))
       (let* ([init (assq-ref (@ d.prop) 'init-expr)]
+             [lambda-arg-env (assq-ref (slot-ref (car init) 'prop) 'body-env)]
              [env (assq-ref (slot-ref (car init) 'prop) 'injection-env)]
              [new-injection-env (env-injection env)])
+        ;;eralse lambda border
+        (@! lambda-arg-env.lambda-border? #f)
         ;make new injection-env
         (assq-set! (slot-ref (car init) 'prop) 'injection-env new-injection-env)
         ;;decrease ref-count
         (@dec! d.ref-count)
         ;;merge outer and inner
-        (merge-let
-          `(,(make <vsymbol> :exp 'let :env (@ env.parent)
-                   :prop `((body-env . ,env) (injection-env . ,new-injection-env)))
-             ,(gen-let-clause env (filter vsymbol? (cadr init)) (cdr form))
-             ,@(cddr init))))
-      (map (pa$ loop 'expr) form))))
+        (values
+          #t
+          (merge-let
+            `(,(make <vsymbol> :exp 'let :env (@ env.parent)
+                     :prop `((body-env . ,env) (injection-env . ,new-injection-env)))
+               ,(gen-let-clause env (filter vsymbol? (cadr init)) (cdr form))
+               ,@(cddr init)))))
+      (values #f (map (pa$ loop 'expr) form)))))
 
