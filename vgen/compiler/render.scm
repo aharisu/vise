@@ -487,7 +487,7 @@
                      (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
                        (env-add-symbol lambda-env sym 'arg)))
                    (cddr lambda-form))]
-           [func-name (symbol->string (gensym "s:list_func"))])
+           [func-name (gensym "s:list_func")])
       (add-auto-generate-exp
         func-name
         `(defun ,func-name 
