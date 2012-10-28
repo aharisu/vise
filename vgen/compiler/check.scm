@@ -69,14 +69,7 @@
      (vise-error "Compiler: Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol)
-  (if-let1 d (env-find-data (@ vsymbol.env) vsymbol)
-    (cond
-      ((and (zero? (@ d.ref-count)) (zero? (@ d.set-count)))
-       (attr-push! d 'not-use))
-      ((zero? (@ d.ref-count))
-       (attr-push! d 'set-only))
-      ((zero? (@ d.set-count))
-       (attr-push! d 'ref-only)))
+  (unless (env-find-data (@ vsymbol.env) vsymbol)
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
                 (string=? "@@" symbol)

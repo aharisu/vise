@@ -227,8 +227,7 @@
       (rlet1 sym (make <vsymbol> :exp sym :env env)
         (env-add-symbol env sym scope)
         (when (and (list? init) (eq? (car init) 'lambda))
-          (attr-push! (env-find-data env sym) 'lambda)
-          scope))
+          (attr-push! (env-find-data env sym) 'lambda)))
       sym))
   (cond
     ((symbol? sym) (to-vsymbol sym))

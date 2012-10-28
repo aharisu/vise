@@ -79,8 +79,14 @@
    (vim-name :init-value #f)
    (ref-count :init-value 0)
    (set-count :init-value 0)
+   (prop :init-keyword :prop  :init-value '())
    )
   )
+
+(define (env-data-not-use? d) 
+  (and (zero? (slot-ref d 'set-count)) (zero? (slot-ref d 'ref-count))))
+(define (env-data-ref-only? d) (zero? (slot-ref d 'set-count)))
+(define (env-data-set-only? d) (zero? (slot-ref d 'ref-count)))
 
 (define (attr-push! o attr)
   (@! o.attr (set-cons (@ o.attr) attr)))
@@ -191,6 +197,18 @@
     (not (or (eq? (@ d.scope) 'arg) (eq? (@ d.scope) 'syntax)))
     #t))
 
+(define (env-injection env :optional inject)
+  (let* ([p (@ env.parent)]
+         [inject (if (undefined? inject) 
+                   (make-env p)
+                   (begin
+                     (@! inject.parent p)
+                     inject))])
+    (@! p.children (remove! (pa$ eq? env) (@ p.children)))
+    (@push! p.children inject)
+    (@! env.parent inject)
+    inject))
+
 (define (print-env-table env)
   (let loop ((env env))
     (for-each
@@ -280,8 +298,9 @@
 
 
 (define-constant traverse-apply-function-hook (gensym))
+(define-constant traverse-symbol-ref (gensym))
 
-(define (sexp-traverse form-list hook)
+(define (sexp-traverse form hook)
   (define (loop ctx form)
     (if (list? form)
       (if-let1 func (assq-ref hook (vexp (car form)))
@@ -381,9 +400,13 @@
             (if-let1 func (assq-ref hook traverse-apply-function-hook)
               (func form ctx loop)
               (map (pa$ loop 'expr) form))]))
-      form))
+      (if-let1 func (assq-ref hook traverse-symbol-ref)
+        (func form ctx loop)
+        form)))
 
-  (map (pa$ loop 'toplevel) form-list))
+  (if (list? form)
+    (map (pa$ loop 'toplevel) form)
+    (loop 'toplevel form)))
 
 (define (find-tail-exp action exp)
   (cond
@@ -437,6 +460,7 @@
 (include "compiler/add-return.scm")
 (include "compiler/render.scm")
 
+(include "compiler/lambda-expand.scm")
 (include "compiler/self-recursion.scm")
 
 (define (vise-compile-from-string str)
@@ -461,6 +485,7 @@
                          vim-symbol-list)))
          (exp-list ((.$
                       vise-phase-render
+                      vise-phase-lambda-expand
                       vise-phase-self-recursion
                       vise-phase-add-return
                       (pa$ vise-phase-check global-env)

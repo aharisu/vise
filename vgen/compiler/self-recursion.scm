@@ -79,7 +79,6 @@
                 (lambda (arg) (and (vsymbol? arg) (@ arg.exp)))
                 ((if lambda? cadr caddr) init))]
         [self-data (env-find-data (@ sym.env) sym)]
-        [body-env (assq-ref (slot-ref (car init) 'prop) 'body-env)]
         [injection-env (assq-ref (slot-ref (car init) 'prop) 'injection-env)]
         [has-tail-recursion? #f])
     (let1 exp (find-tail-exp
@@ -87,6 +86,7 @@
                   (if (and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
                         (vsymbol? (car exp)) (eq? self-data (env-find-data (slot-ref (car exp) 'env) (car exp))))
                     (begin
+                      (@dec! self-data.ref-count)
                       (set! has-tail-recursion? #t)
                       (expand-expression
                         injection-env 
@@ -101,30 +101,33 @@
                       exp)))
                 init)
       (if has-tail-recursion?
-        `(,@(take exp (if lambda? 2 4))
-           ,(list
-              (make <vsymbol> :exp 'let :env injection-env)
-              (append
-                (map
-                  (lambda (arg)
-                    (list
-                      (rlet1 sym (make <vsymbol> :exp arg :env injection-env)
-                        (env-add-symbol injection-env sym 'local))
-                      (make <vsymbol> :exp arg :env body-env)))
-                  args)
-                (list (list
-                        (rlet1 sym (make <vsymbol> :exp 'recursion :env injection-env)
+        (let1 new-injection-env (env-injection injection-env)
+          ;;make new injection-env
+          (assq-set! (slot-ref (car init) 'prop) 'injection-env new-injection-env)
+          `(,@(take exp (if lambda? 2 4))
+             ,(list
+                (make <vsymbol> :exp 'let :env injection-env)
+                (append
+                  (map
+                    (lambda (arg)
+                      (list
+                        (rlet1 sym (make <vsymbol> :exp arg :env injection-env)
                           (env-add-symbol injection-env sym 'local))
-                        #t)))
-              (append
-                (list
-                  (make <vsymbol> :exp 'while :env injection-env)
-                  (make <vsymbol> :exp 'recursion :env injection-env)
+                        (make <vsymbol> :exp arg :env new-injection-env)))
+                    args)
+                  (list (list
+                          (rlet1 sym (make <vsymbol> :exp 'recursion :env injection-env)
+                            (env-add-symbol injection-env sym 'local))
+                          #t)))
+                (append
                   (list
-                    (make <vsymbol> :exp 'set! :env injection-env)
+                    (make <vsymbol> :exp 'while :env injection-env)
                     (make <vsymbol> :exp 'recursion :env injection-env)
-                    #f))
-                ((if lambda? cddr cddddr) exp))))
+                    (list
+                      (make <vsymbol> :exp 'set! :env injection-env)
+                      (make <vsymbol> :exp 'recursion :env injection-env)
+                      #f))
+                  ((if lambda? cddr cddddr) exp)))))
         exp))))
 
 

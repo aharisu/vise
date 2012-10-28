@@ -51,8 +51,7 @@
     (and d 
       (eq? (@ d.scope) 'local)
       (has-attr? d 'free)
-      (not (or (has-attr? d 'ref-only) 
-             (has-attr? d 'not-use))))))
+      (not (env-data-ref-only? d)))))
 
 (define (vim-ref-symbol symbol)
   (let1 sym (vim-symbol symbol)
@@ -319,7 +318,7 @@
 (define-vise-renderer (let form ctx)
   (define (all-ref-only? vars)
     (every
-      (lambda (var) (has-attr? (env-find-data (@ var.env) var) 'ref-only))
+      (lambda (var) (env-data-ref-only? (env-find-data (@ var.env) var)))
       vars))
 
   (if (expr-ctx? ctx)
@@ -341,15 +340,17 @@
                 ,@(if (all-ref-only? (map car (cadr form)))
                     (cddr form)
                     ;;surrounded by let
-                    (let ([body-env (assq-ref (slot-ref (car form) 'prop) 'body-env)]
-                          [injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)])
+                    (let* ([injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)]
+                           [new-injection-env (env-injection injection-env)])
+                      ;;make new injection-env
+                      (assq-set! (slot-ref (car form) 'prop) 'injection-env new-injection-env)
                       `((,(make <vsymbol> :exp 'let :env injection-env)
                           ,(map
                              (lambda (var)
                                (list
                                  (rlet1 sym (make <vsymbol> :exp var :env injection-env)
                                    (env-add-symbol injection-env sym 'local))
-                                 (make <vsymbol> :exp var :env body-env)))
+                                 (make <vsymbol> :exp var :env new-injection-env)))
                              (map (.$ vexp car) (cadr form)))
                           ;;original body
                           ,@(cddr form)))))))
