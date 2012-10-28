@@ -7,7 +7,7 @@
       (let . ,(pa$ add-return #t)))))
 
 (define (add-return lambda? form ctx loop)
-  (rlet1 ret (if (eq? ctx 'toplevel)
+  (let1 ret (if (eq? ctx 'toplevel)
                form
                (let1 env (slot-ref (car form) 'env)
                  `(,@(drop-right form 1)
