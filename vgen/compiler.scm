@@ -468,6 +468,7 @@
 
 (include "compiler/lambda-expand.scm")
 (include "compiler/self-recursion.scm")
+(include "compiler/erase.scm")
 
 (define (vise-compile-from-string str)
   (vise-compile (open-input-string str)))
@@ -491,6 +492,7 @@
                          vim-symbol-list)))
          (exp-list ((.$
                       vise-phase-render
+                      vise-phase-erase
                       vise-phase-lambda-expand
                       vise-phase-self-recursion
                       vise-phase-add-return
