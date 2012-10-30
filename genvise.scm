@@ -20,5 +20,6 @@
                         :load-path (reverse! loadpath))
           (begin
             (close-input-port in-port)
-            (close-output-port out-port)))))))
+            (close-output-port out-port))))))
+  0)
 
