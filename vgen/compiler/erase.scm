@@ -134,13 +134,14 @@
         (if (null? vars)
           (reverse! acc)
           (let1 d (and (vsymbol? (caar vars)) (env-find-data (slot-ref (caar vars) 'env) (caar vars)))
-            (if (and d (env-data-not-use? d) (erase-is-literal? (cadar vars)))
-              (mark-erase acc) ;erase var decl
-              (cons 
-                (list
-                  (caar vars)
-                  (erase-expression 'expr (car vars) (cadar vars)))
-                acc)))))
+            (loop (cdr vars)
+                  (if (and d (env-data-not-use? d) (erase-is-literal? (cadar vars)))
+                    (mark-erase acc) ;erase var decl
+                    (cons 
+                      (list
+                        (caar vars)
+                        (erase-expression 'expr (car vars) (cadar vars)))
+                      acc))))))
      ,@(filter-map
          (erase-filter 'stmt form)
          (cddr form))))
