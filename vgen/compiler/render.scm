@@ -82,21 +82,28 @@
   dict-type-symbol)
 
 (define (render-func-call ctx form)
-  (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
-    (display "call "))
-  (display 
-    (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
-          (sym (vise-render-to-string 'expr (car form)))
-          (d (and (vsymbol? (car form))
-               (env-find-data (slot-ref (car form) 'env) (car form)))))
-      (cond
-        [(or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function))
-         (string-append sym params)]
-        [(has-attr? d 'lambda) (string-append sym ".func" params)]
-        [else 
-          (add-auto-generate-exp 'dict-type
-                                 `(defvar ,(get-dict-type-symbol) (type (dict))))
-          #`"(type(,sym)==,(get-dict-type-symbol)) ? ,|sym|.func,|params| : ,|sym|,|params|"])))
+  (define (display-call)
+    (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
+      (display "call ")))
+
+  (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
+        (sym (vise-render-to-string 'expr (car form)))
+        (d (and (vsymbol? (car form))
+             (env-find-data (slot-ref (car form) 'env) (car form)))))
+    (cond
+      [(or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function))
+       (display-call)
+       (display (string-append sym params))]
+      [(has-attr? d 'lambda)
+       (display-call)
+       (display (string-append sym ".func" params))]
+      [else 
+        (add-auto-generate-exp 'dict-type
+                               `(defvar ,(get-dict-type-symbol) (type (dict))))
+        (display
+          (if (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
+            #`"if (type(,sym)==,(get-dict-type-symbol))\n  call ,|sym|.func,|params|\nelse\n  call ,|sym|,|params|\nendif"
+            #`"(type(,sym)==,(get-dict-type-symbol)) ? ,|sym|.func,|params| : ,|sym|,|params|"))]))
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (add-new-line)))
 
