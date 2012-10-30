@@ -115,12 +115,12 @@
                     (lambda (arg)
                       (list
                         (rlet1 sym (make <vsymbol> :exp arg :env injection-env)
-                          (env-add-symbol injection-env sym 'local))
+                          (env-add-symbol injection-env sym 'local :attr '(auto-gen)))
                         (make <vsymbol> :exp arg :env new-injection-env)))
                     args)
                   (list (list
                           (rlet1 sym (make <vsymbol> :exp 'recursion :env injection-env)
-                            (env-add-symbol injection-env sym 'local))
+                            (env-add-symbol injection-env sym 'local :attr '(auto-gen)))
                           #t)))
                 (append
                   (list

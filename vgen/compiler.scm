@@ -75,7 +75,7 @@
    (symbol :init-keyword :symbol)
    (exp :init-keyword :exp)
    (scope :init-keyword :scope)
-   (attr :init-value '())
+   (attr :init-keyword :attr :init-value '())
    (vim-name :init-value #f)
    (ref-count :init-value 0)
    (set-count :init-value 0)
@@ -84,9 +84,14 @@
   )
 
 (define (env-data-not-use? d) 
-  (and (zero? (slot-ref d 'set-count)) (zero? (slot-ref d 'ref-count))))
-(define (env-data-ref-only? d) (zero? (slot-ref d 'set-count)))
-(define (env-data-set-only? d) (zero? (slot-ref d 'ref-count)))
+  (and (not (has-attr? d 'auto-gen))
+    (zero? (slot-ref d 'set-count)) (zero? (slot-ref d 'ref-count))))
+(define (env-data-ref-only? d) 
+  (and (not (has-attr? d 'auto-gen))
+    (zero? (slot-ref d 'set-count))))
+(define (env-data-set-only? d) 
+  (and (not (has-attr? d 'auto-gen))
+    (zero? (slot-ref d 'ref-count))))
 
 (define (attr-push! o attr)
   (@! o.attr (set-cons (@ o.attr) attr)))
@@ -162,16 +167,17 @@
 
 (define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
 
-(define (env-add-symbol env symbol scope)
-  (env-add-symbol&exp env symbol scope #f))
+(define (env-add-symbol env symbol scope :key (attr '()))
+  (env-add-symbol&exp env symbol scope #f :attr attr))
 
-(define (env-add-symbol&exp env symbol scope exp)
+(define (env-add-symbol&exp env symbol scope exp :key (attr '()))
   (let1 symbol (get-symbol symbol)
     (@push! env.symbols 
             (cons symbol (make <env-data>
                                :symbol symbol
                                :exp exp
-                               :scope scope)))))
+                               :scope scope
+                               :attr attr)))))
 
 (define (env-find-data-with-outside-lambda? env symbol)
   (let1 symbol (get-symbol symbol)

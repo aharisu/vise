@@ -60,13 +60,13 @@
           (lambda (arg init)
             (list 
               (rlet1 sym (make <vsymbol> :exp (vexp arg) :env env)
-                (env-add-symbol env sym 'local))
+                (env-add-symbol env sym 'local :attr '(auto-gen)))
               init))
           args (take init len-args))
         (if rest?
           (list (list
                   (rlet1 sym (make <vsymbol> :exp (vexp (last args)) :env env)
-                    (env-add-symbol env sym 'local))
+                    (env-add-symbol env sym 'local :attr '(auto-gen)))
                   (list 'quote (drop init len-args))))
           '()))))
   (define (merge-let form)
