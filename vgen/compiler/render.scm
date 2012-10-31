@@ -78,7 +78,9 @@
 (define dict-type-symbol #f)
 (define (get-dict-type-symbol)
   (unless dict-type-symbol
-    (set! dict-type-symbol (gensym "s:dict_type_")))
+    (set! dict-type-symbol (gensym "s:dict_type_"))
+    (add-auto-generate-exp 'dict-type
+                           `(defvar ,(get-dict-type-symbol) (type (dict)))))
   dict-type-symbol)
 
 (define (render-func-call ctx form)
@@ -98,8 +100,6 @@
        (display-call)
        (display (string-append sym ".func" params))]
       [else 
-        (add-auto-generate-exp 'dict-type
-                               `(defvar ,(get-dict-type-symbol) (type (dict))))
         (display
           (if (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
             #`"if (type(,sym)==,(get-dict-type-symbol))\n  call ,|sym|.func,|params|\nelse\n  call ,|sym|,|params|\nendif"
