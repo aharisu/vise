@@ -453,11 +453,6 @@
                       ,(find-tail-exp action 'stmt (last clause)))
                    clause))
                (cddr exp)))]
-       [(list-func)
-        (list (car exp)
-              (cadr exp)
-              (caddr exp)
-              (find-tail-exp action 'expr (cadddr exp)))]
        [else 
          (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
            exp
