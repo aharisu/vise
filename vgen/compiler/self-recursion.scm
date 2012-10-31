@@ -90,6 +90,7 @@
                       (set! has-tail-recursion? #t)
                       (expand-expression
                         injection-env 
+                        'stmt
                         '()
                         `(begin 
                            (set! recursion #t)

@@ -83,21 +83,25 @@
                            `(defvar ,(get-dict-type-symbol) (type (dict)))))
   dict-type-symbol)
 
-(define (render-func-call ctx form)
-  (define (display-call)
-    (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
-      (display "call ")))
+(define-constant temp-symbol (gensym "temp_"))
 
+(define (render-func-call ctx form)
   (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
         (sym (vise-render-to-string 'expr (car form)))
         (d (and (vsymbol? (car form))
              (env-find-data (slot-ref (car form) 'env) (car form)))))
     (cond
-      [(or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function))
-       (display-call)
+      [(and (symbol? (vexp (car form)))
+         (or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function)))
+       (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
+         (display "call "))
        (display (string-append sym params))]
-      [(has-attr? d 'lambda)
-       (display-call)
+      [(or (and (list? (car form)) (eq? 'lambda (vexp (caar form))))
+         (and d (has-attr? d 'lambda)))
+       (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
+         (if (symbol? (vexp (car form)))
+           (display "call ")
+           (begin (display "let ") (display temp-symbol) (display " = "))))
        (display (string-append sym ".func" params))]
       [else 
         (display
@@ -385,12 +389,18 @@
 
 
 (define-vise-renderer (begin form ctx)
-  (ensure-stmt-or-toplevel-ctx form ctx)
-  (for-each
-    (lambda (exp)
-      (vise-render ctx exp)
-      (add-new-line))
-    (cdr form)))
+  (if (expr-ctx? ctx)
+    (let1 func-name (gensym "s:begin")
+      (add-auto-generate-exp
+        func-name
+        `(defun ,func-name () :normal ,@(cdr form)))
+      (display func-name)
+      (display "()"))
+    (for-each
+      (lambda (exp)
+        (vise-render ctx exp)
+        (add-new-line))
+      (cdr form))))
 
 (define-vise-renderer (if form ctx)
   (if (expr-ctx? ctx)

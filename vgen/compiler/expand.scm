@@ -6,9 +6,9 @@
     (if (null? exp-list)
       (reverse! (filter identity acc))
       (loop (cdr exp-list)
-            (cons (expand-expression env '() (car exp-list)) acc)))))
+            (cons (expand-expression env 'toplevel '() (car exp-list)) acc)))))
 
-(define (expand-expression env parent exp)
+(define (expand-expression env ctx parent exp)
   (cond
     [(list? exp)
      (case (car exp)
@@ -21,30 +21,41 @@
        [(defun) ;top level
         (unless (env-toplevel? env)
           (vise-error "Compiler: defun can only be defined at top level:~a" exp))
-        (expand-defun env parent exp)]
-       [(defvar) (expand-defvar env parent exp)]
-       [(lambda) (expand-lambda env parent exp)]
-       [(if) (expand-if env parent exp)]
-       [(set!) (expand-set! env parent exp)]
-       [(let* let letrec) (expand-let env parent exp)]
-       [(dolist) (expand-dolist env parent exp)]
-       [(while begin and or quasiquote unquote unquote-splicing augroup)
+        (expand-defun env ctx parent exp)]
+       [(defvar) (expand-defvar env ctx parent exp)]
+       [(lambda) (expand-lambda env ctx parent exp)]
+       [(if) (expand-if env ctx parent exp)]
+       [(set!) (expand-set! env ctx parent exp)]
+       [(let* let letrec) (expand-let env ctx parent exp)]
+       [(dolist) (expand-dolist env ctx parent exp)]
+       [(while)
+        (append
+          (list
+            (make <vsymbol> :exp (car exp) :env env
+                :debug-info (debug-source-info exp))
+            (expand-expression env 'expr exp (cadr exp)))
+          (map (pa$ expand-expression env 'stmt exp) (cddr exp)))]
+       [(and or quasiquote unquote unquote-splicing augroup)
         (cons 
           (make <vsymbol> :exp (car exp) :env env
                 :debug-info (debug-source-info exp))
-          (map (pa$ expand-expression env exp) (cdr exp)))]
+          (map (pa$ expand-expression env 
+                    (if (or* eq? (car exp) 'and 'or) 'expr ctx)
+                    exp)
+               (cdr exp)))]
+       [(begin) (expand-begin env ctx parent exp)]
        [(list-func)
         (list
           (make <vsymbol> :exp (car exp) :env env
                 :debug-info (debug-source-info exp))
           (cadr exp) ;keyword
-          (expand-expression env exp (caddr exp))
-          (expand-expression env exp (cadddr exp)))]
-       [(dict) (expand-dict env parent exp)]
-       [(try) (expand-try env parent exp)]
-       [(autocmd) (expand-autocmd env parent exp)]
-       [else (expand-apply env parent exp)])]
-    [(symbol? exp) (expand-refer-symbol env parent exp)]
+          (expand-expression env 'expr exp (caddr exp))
+          (expand-expression env 'expr exp (cadddr exp)))]
+       [(dict) (expand-dict env ctx parent exp)]
+       [(try) (expand-try env ctx parent exp)]
+       [(autocmd) (expand-autocmd env ctx parent exp)]
+       [else (expand-apply env ctx parent exp)])]
+    [(symbol? exp) (expand-refer-symbol env ctx parent exp)]
     [else exp]))
 
 (define-syntax register-macro
@@ -158,6 +169,11 @@
     env
     (length seq)
     `(len ,seq))
+  ;;let1
+  (register-macro
+    env
+    (let1 sym expr . body)
+    `(let ((,sym ,expr)) ,@body))
   )
 
 (define (constract-proc-args proc-env arg)
@@ -192,7 +208,7 @@
            [else (vise-error "Unkown name scope:~a ~a" name exp)]))]
       [else 'script])))
 
-(define (expand-defun env parent exp)
+(define (expand-defun env ctx parent exp)
   (define (parse-body fn-env body)
     (if (null? body)
       body
@@ -201,7 +217,7 @@
                                (values :normal body))
         (cons modify 
               (map
-                (pa$ expand-expression fn-env exp)
+                (pa$ expand-expression fn-env 'stmt exp)
                 body)))))
 
   (when (< (length exp) 4)
@@ -242,16 +258,16 @@
              (loop (cdr arg) (cons (car arg) ret))
              (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret)))))))))))
 
-(define (expand-defvar env parent exp)
+(define (expand-defvar env ctx parent exp)
   (when (< (length exp) 3)
     (vise-error "Compiler: Bad syntax:~a" exp))
   (list
     (make <vsymbol> :exp (car exp) :env env ;defvar
           :debug-info (debug-source-info exp))
     (expand-symbol-bind (cadr exp) (caddr exp) (get-name-scope exp (cadr exp)) env)
-    (expand-expression env exp (caddr exp))))
+    (expand-expression env 'expr exp (caddr exp))))
 
-(define (expand-lambda env parent exp)
+(define (expand-lambda env ctx parent exp)
   (when (< (length exp) 3)
     (vise-error "Compiler: Bad syntax:~a" exp))
   (let* ([lambda-env (make-env env #t)]
@@ -263,25 +279,26 @@
               :prop `((body-env . ,lambda-env) (injection-env . ,injection-env)))
         (constract-proc-args lambda-env (cadr exp))) ;args
       (map ;body
-        (pa$ expand-expression injection-env exp)
+        (pa$ expand-expression injection-env 'stmt exp)
         (cddr exp)))))
 
-(define (expand-if env parent exp)
-  (match (cdr exp)
-    [(pred then)
-     (list (make <vsymbol> :exp (car exp) :env env  ;if
-                 :debug-info (debug-source-info exp))
-           (expand-expression env exp (cadr exp)) ;pred
-           (expand-expression env exp (caddr exp)))] ;than
-    [(pred then else)
-     (list (make <vsymbol> :exp (car exp) :env env ;if
-                 :debug-info (debug-source-info exp))
-           (expand-expression env exp (cadr exp)) ;pred
-           (expand-expression env exp (caddr exp)) ;than
-           (expand-expression env exp (cadddr exp)))] ;else
-    [else (vise-error "Compiler: Bad if syntax:~a" exp)]))
+(define (expand-if env ctx parent exp)
+  (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+    (match (cdr exp)
+      [(pred then)
+       (list (make <vsymbol> :exp (car exp) :env env  ;if
+                   :debug-info (debug-source-info exp))
+             (expand-expression env 'expr exp (cadr exp)) ;pred
+             (expand-expression env cctx exp (caddr exp)))] ;than
+      [(pred then else)
+       (list (make <vsymbol> :exp (car exp) :env env ;if
+                   :debug-info (debug-source-info exp))
+             (expand-expression env 'expr exp (cadr exp)) ;pred
+             (expand-expression env cctx exp (caddr exp)) ;than
+             (expand-expression env cctx exp (cadddr exp)))] ;else
+      [else (vise-error "Compiler: Bad if syntax:~a" exp)])))
 
-(define (expand-set! env parent exp)
+(define (expand-set! env ctx parent exp)
   (match (cdr exp)
     [(sym e)
      (list
@@ -291,11 +308,11 @@
          (rlet1 sym (make <vsymbol> :exp sym :env env)
            (if-let1 d (env-find-data env sym)
              (@inc! d.set-count)))
-         (expand-expression env exp sym))
-       (expand-expression env exp e))]
+         (expand-expression env 'expr exp sym))
+       (expand-expression env 'expr exp e))]
     [else (vise-error "Compiler: Bad set! syntax:~a" exp)]))
 
-(define (expand-dolist env parent exp)
+(define (expand-dolist env ctx parent exp)
   (match exp
     [(_ (var expr) . body)
      (let1 dolist-env (make-env env)
@@ -305,13 +322,13 @@
                  :debug-info (debug-source-info exp))
            (list
              (expand-symbol-bind var expr 'local dolist-env)
-             (expand-expression env exp expr)))
+             (expand-expression env 'expr exp expr)))
          (map
-           (pa$ expand-expression dolist-env exp)
+           (pa$ expand-expression dolist-env 'stmt exp)
            body)))]
     [else (vise-error "Compiler: Bad syntax:~a" exp)]))
 
-(define (expand-let env parent exp)
+(define (expand-let env ctx parent exp)
   (match exp
     [(_ (? list? vars) . body)
      (receive (vars let-env)
@@ -327,7 +344,7 @@
              (map
                list
                (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) 'local let-env)))
-               (var-loop (lambda (var) (expand-expression let-env exp (cadar var)))))
+               (var-loop (lambda (var) (expand-expression let-env 'expr exp (cadar var)))))
              let-env))
          (let loop ((vars vars)
                     (let-env (make-env env))
@@ -339,7 +356,7 @@
                    (cons
                      (list
                        (expand-symbol-bind (caar vars) (cadar vars) 'local let-env)
-                       (expand-expression (@ let-env.parent) exp (cadar vars)))
+                       (expand-expression (@ let-env.parent) 'expr exp (cadar vars)))
                      acc)))))
        (let1 injection-env (make-env let-env)
          `(,(make <vsymbol> :exp 'let :env env ;let or let* or letrec
@@ -347,16 +364,25 @@
                   :prop `((body-env . ,let-env) (injection-env . ,injection-env)))
             ,vars
             ,@(map ;body
-                (pa$ expand-expression injection-env exp)
+                (pa$ expand-expression injection-env 'stmt exp)
                 (cddr exp)))))]
     ;;named-let
     [(let (? symbol? name) ((var . spec) ...) . body)
-     (expand-expression env parent
+     (expand-expression env ctx parent
                         `(letrec ((,name (lambda ,var ,@body)))
                            (,name ,@(map car spec))))]
     [_ (vise-error "Bad let syntax:~a" exp)]))
 
-(define (expand-dict env parent exp)
+(define (expand-begin env ctx parent exp)
+  (if (eq? ctx 'expr)
+    (expand-expression env 'expr parent `((lambda () ,@(cdr exp))))
+    (cons 
+      (make <vsymbol> :exp (car exp) :env env
+            :debug-info (debug-source-info exp))
+      (map (pa$ expand-expression env ctx exp)
+           (cdr exp)))))
+
+(define (expand-dict env ctx parent exp)
   (append
     (cons (make <vsymbol> :exp (car exp) :env env) '())
     (match (cdr exp)
@@ -368,22 +394,22 @@
                (make <vsymbol> :exp sym :env env
                      :debug-info (debug-source-info exp))
                sym)
-             (expand-expression env exp init)))
+             (expand-expression env 'expr exp init)))
          sym init)]
       [_ (vise-error "dict format error")])))
 
-(define (expand-try env parent exp)
+(define (expand-try env ctx parent exp)
   `(,(make <vsymbol> :exp (car exp) :env env ;dolist 
            :debug-info (debug-source-info exp))
-     ,(expand-expression env exp (cadr exp))
+     ,(expand-expression env 'stmt exp (cadr exp))
      ,@(map
          (lambda (clause) 
            (if (list? clause)
-             (map (pa$ expand-expression env clause) clause)
+             (map (pa$ expand-expression env 'stmt clause) clause)
              clause))
          (cddr exp))))
 
-(define (expand-autocmd env parent exp)
+(define (expand-autocmd env ctx parent exp)
   (define (err)
     (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd).\n~a" exp))
   (receive (group events pat nest cmd)
@@ -404,23 +430,23 @@
       (list
         (make <vsymbol> :exp (car exp) :env env ;autocmd
               :debug-info (debug-source-info exp))
-        (expand-expression env exp group)
-        (map (pa$ expand-expression env exp) events)
+        (expand-expression env 'expr exp group)
+        (map (pa$ expand-expression env 'expr exp) events)
         pat
         nest
-        (expand-expression env exp cmd)))))
+        (expand-expression env 'stmt exp cmd)))))
 
-(define (expand-apply env parent exp)
+(define (expand-apply env ctx parent exp)
   (let1 e (env-find-exp env (car exp))
     (if (vmacro? e)
       ;;macro expand
-      (expand-expression env parent ((@ e.exp) exp))
+      (expand-expression env ctx parent ((@ e.exp) exp))
       ;;function call
-      (rlet1 form (map (pa$ expand-expression env exp) exp)
+      (rlet1 form (map (pa$ expand-expression env 'expr exp) exp)
         (when (is-a? (car form) <vexp>)
           (slot-set! (car form) 'debug-info (debug-source-info exp)))))))
 
-(define (expand-refer-symbol env parent exp)
+(define (expand-refer-symbol env ctx parent exp)
   (rlet1 sym (make <vsymbol> 
                    :exp exp
                    :env env
