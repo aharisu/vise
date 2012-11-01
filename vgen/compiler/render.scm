@@ -790,16 +790,19 @@
      (vise-render 'expr e)
      (display "]")]))
 
-(define-vise-renderer (qq-str form ctx)
-  (ensure-expr-ctx form ctx)
+(define (**-str form delimiter)
   (match form
     [(_ str)
+     (display delimiter)
      (unless (string? str)
        (vise-error "string literal require, bug got ~a. ~a" str form))
-     (display "`")
      (display (let1 str (write-to-string str)
                 (substring str 1 (- (string-length str) 1))))
-     (display "`")]))
+     (display delimiter)]))
+
+(define-vise-renderer (qq-str form ctx)
+  (ensure-expr-ctx form ctx)
+  (**-str form "`"))
 
 (define-vise-renderer (qq= form ctx)
   (ensure-expr-ctx form ctx)
@@ -809,6 +812,9 @@
      (vise-render-expr exp)
      (display "`")]))
 
+(define-vise-renderer (sq-str form ctx)
+  (ensure-expr-ctx form ctx)
+  (**-str form "'"))
 
 ;;
 ;;
