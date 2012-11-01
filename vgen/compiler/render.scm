@@ -692,12 +692,15 @@
         (vise-render-expr a)]
        [(_ a b)
         (vise-render-expr a)
-        (display " ")
-        (display ,sop)
-        (display " ")
+        (display ,#`" ,sop ")
         (vise-render-expr b)]
        [(_ a b . x)
-        (list* ',op (list ',op a b) x)])))
+        (vise-render-expr a)
+        (display ,#`" ,sop ")
+        (vise-render-expr b)
+        (display (string-join
+                   (map (cut vise-render-expr <> #t) x)
+                   ,#`" ,sop " 'prefix))])))
 
 (define-nary + "+")
 (define-nary - "-")
@@ -836,18 +839,23 @@
 
 (define (funcall? exp)
   (if (list? exp)
-    (if (or* eq? (vexp (car exp)) 'quote 'ref)
+    (if (or* eq? (vexp (car exp)) 'quote 'ref 'string-append)
       #f
       #t)
     #f))
 
 (define (vise-render-expr exp :optional (to-string? #f))
-  (let1 funcall? (funcall? exp)
-    (when funcall? (display "("))
-    (begin0 (if to-string?
-              (vise-render-to-string 'expr exp)
-              (vise-render 'expr exp))
-      (when funcall? (display ")")))))
+  (let ([port (make-vise-output-port (open-output-string))]
+        [funcall? (funcall? exp)])
+    (with-output-to-port
+      port
+      (lambda () 
+        (when funcall? (display "("))
+        (vise-render 'expr exp)
+        (when funcall? (display ")"))))
+    (if to-string?
+      (get-output-string (@ port.raw))
+      (display (get-output-string (@ port.raw))))))
 
 (define (vise-render-identifier sym)
   (vise-safe-name-friendly (x->string sym)))
