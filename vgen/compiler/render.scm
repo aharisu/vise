@@ -80,8 +80,20 @@
   (unless dict-type-symbol
     (set! dict-type-symbol (gensym "s:dict_type_"))
     (add-auto-generate-exp 'dict-type
-                           `(defvar ,(get-dict-type-symbol) (type (dict)))))
+                           `(defvar ,dict-type-symbol (type (dict)))))
   dict-type-symbol)
+
+(define sid-prefix-symbol #f)
+(define (get-sid-preifx-symbol)
+  (unless sid-prefix-symbol
+    (set! sid-prefix-symbol (gensym "s:SID_PREFIX_"))
+    (add-auto-generate-exp 
+      'sid-prefix
+      `(defun ,sid-prefix-symbol () :normal
+              (let ((s (matchstr (expand (sq-str "<sfile>"))
+                                 '|'<SNR>\\d\\+_\\zeSID_PREFIX$'|)))
+                (return (if (empty s) "s:" s))))))
+  sid-prefix-symbol)
 
 (define-constant temp-symbol (gensym "temp_"))
 
@@ -322,8 +334,10 @@
     (add-auto-generate-exp 
       func-name
       `(defun ,func-name ,(cadr form) :dict ,@(cddr form)))
-    (display "{'func':function('")
-    (display func-name)
+    (display "{'func':function(")
+    (display (get-sid-preifx-symbol))
+    (display "() . '")
+    (display (remove-symbol-prefix func-name))
     (display "')")
     (display
       (string-join
