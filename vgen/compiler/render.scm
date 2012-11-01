@@ -797,10 +797,17 @@
 (define (vise-render-identifier sym)
   (vise-safe-name-friendly (x->string sym)))
 
+(define (substring* str start end)
+  (let1 len (string-length str)
+    (substring str start (if (< len end) len end))))
+
 (define (vise-safe-name-friendly str)
-  (receive (prefix str) (if (eq? (string-ref str 0) #\&)
-                          (values "&" (substring str 1 (string-length str)))
-                          (values "" str))
+  (receive (prefix str) (cond
+                          [(or* string=? (substring* str 0 2) "@@" "g:" "s:" "v:" "b:" "w:" "a:")
+                           (values (substring* str 0 2) (substring str 2 (string-length str)))]
+                          [(or* eq? (string-ref str 0) #\& #\@)
+                           (values (x->string (string-ref str 0)) (substring str 1 (string-length str)))]
+                          [else (values "" str)])
     (string-append
       prefix
       (with-string-io str
@@ -814,7 +821,7 @@
                                  [(#\!) (display #\X) (loop (read-char))]
                                  [(#\<) (display "_LT") (loop (read-char))]
                                  [(#\>) (display "_GT") (loop (read-char))]
-                                 [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\= #\. #\/ #\~)
+                                 [(#\* #\> #\@ #\$ #\% #\^ #\& #\* #\+ #\: #\= #\. #\/ #\~)
                                   (display #\_)
                                   (display (number->string (char->integer c) 16))
                                   (loop (read-char))]
