@@ -651,6 +651,20 @@
   (vise-render 'stmt (cadr (cddddr form)))
   (add-new-line))
 
+(define-vise-renderer (setlocal form ctx)
+  (ensure-stmt-or-toplevel-ctx form ctx)
+  (match form
+    [(_ sym)
+     (display "setlocal ")
+     (vise-render-expr sym)]
+    [(_ sym . val)
+     (display "setlocal ")
+     (vise-render-expr sym)
+     (display "=")
+     (display (string-join
+                (map (cut vise-render-expr <> #t) val)
+                " "))]))
+
 ;;------------------------------------------------------------
 ;; Operators
 ;;
@@ -802,16 +816,18 @@
 
 (define (funcall? exp)
   (if (list? exp)
-    (if (or* eq? (vexp (car exp)) 'quote 'ref) 
-      #t
-      #f)
+    (if (or* eq? (vexp (car exp)) 'quote 'ref)
+      #f
+      #t)
     #f))
 
-(define (vise-render-expr exp)
+(define (vise-render-expr exp :optional (to-string? #f))
   (let1 funcall? (funcall? exp)
     (when funcall? (display "("))
-    (vise-render 'expr exp)
-    (when funcall? (display ")"))))
+    (begin0 (if to-string?
+              (vise-render-to-string 'expr exp)
+              (vise-render 'expr exp))
+      (when funcall? (display ")")))))
 
 (define (vise-render-identifier sym)
   (vise-safe-name-friendly (x->string sym)))
