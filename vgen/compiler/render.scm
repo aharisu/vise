@@ -722,6 +722,28 @@
 (define-nary and "&&")
 (define-nary or  "||")
 
+(define-macro (define-set-nary op sop sop2)
+  `(define-vise-renderer (,op form ctx) stmt
+     (ensure-stmt-or-toplevel-ctx form ctx)
+     (match form
+       [(_ a b)
+        (display "let ")
+        (vise-render-expr a)
+        (display ,#`" ,sop ")
+        (vise-render-expr b)]
+       [(_ a b . x)
+        (display "let ")
+        (vise-render-expr a)
+        (display ,#`" ,sop ")
+        (vise-render-expr b)
+        (display (string-join
+                   (map (cut vise-render-expr <> #t) x)
+                   ,#`" ,sop2 " 'prefix))])))
+
+(define-set-nary += "+=" "+")
+(define-set-nary -= "-=" "-")
+(define-set-nary .= ".=" ".")
+
 (define-macro (define-unary op sop)
   `(define-vise-renderer (,op form ctx) expr
      (ensure-expr-ctx form ctx)
@@ -734,18 +756,16 @@
 (define-unary lognot "~")
 (define-unary &      "&")               ; only unary op
 
-(define-macro (define-binary op sop :optional (context 'expr))
-  `(define-vise-renderer (,op form ctx) ,context
-     ,(if (eq? context 'expr)
-        '(ensure-expr-ctx form ctx)
-        '(ensure-stmt-or-toplevel-ctx form ctx))
+(define-macro (define-binary op sop)
+  `(define-vise-renderer (,op form ctx) expr
+     (ensure-expr-ctx form ctx)
      (match form
        [(_ a b)
         (vise-render-expr a)
         (display " ")
         (display ,sop)
         (display " ")
-        (vise-render-expr b) ])))
+        (vise-render-expr b)])))
 
 (define-binary %       "%")
 (define-binary <       "<")
@@ -754,10 +774,6 @@
 (define-binary >=      ">=")
 (define-binary ==      "==")
 (define-binary !=      "!=")
-
-(define-binary +=      "+=" 'stmt)
-(define-binary -=      "-=" 'stmt)
-(define-binary .=      ".=" 'stmt)
 
 (define-binary is "is")
 (define-binary isnot "isnot")
