@@ -7,17 +7,16 @@
       (let . ,(pa$ add-return #t)))))
 
 (define (add-return lambda? form ctx loop)
-  (let1 ret (if (eq? ctx 'toplevel)
-               form
-               (let1 env (slot-ref (car form) 'env)
-                 `(,@(drop-right form 1)
-                    ,(find-tail-exp
-                       (lambda (exp ctx)
-                         (if (eq? ctx 'stmt)
-                           (list (make <vsymbol> :exp 'return :env env) exp)
-                           exp))
-                       'stmt
-                       (last form)))))
+  (let1 ret (let1 env (slot-ref (car form) 'env)
+              `(,@(drop-right form 1)
+                 ,(find-tail-exp
+                    (lambda (exp ctx)
+                      (if (and (eq? ctx 'stmt) 
+                            (or (not (list? exp)) (eq? (vise-lookup-renderer-ctx (car exp)) 'expr) ))
+                        (list (make <vsymbol> :exp 'return :env env) exp)
+                        exp))
+                    'stmt
+                    (last form))))
     (if lambda?
       `(,(car ret)
          ,(cadr ret)

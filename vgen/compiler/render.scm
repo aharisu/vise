@@ -161,6 +161,16 @@
   (hash-table-put! renderer-table name renderer))
 
 (define (vise-lookup-renderer sym)
+  (if-let1 v (vise-lookup-renderer-value sym)
+    (cdr v)
+    #f))
+
+(define (vise-lookup-renderer-ctx sym)
+  (if-let1 v (vise-lookup-renderer-value sym)
+    (car v)
+    #f))
+
+(define (vise-lookup-renderer-value sym)
   (cond 
     [(vsymbol? sym)
      (if-let1 d (env-find-data (@ sym.env) sym)
@@ -171,8 +181,8 @@
 
 (define-syntax define-vise-renderer
   (syntax-rules ()
-    [(_ (op form ctx) . body)
-     (vise-register-renderer! 'op (lambda (form ctx) . body))]
+    [(_ (op form ctx) req-ctx . body)
+     (vise-register-renderer! 'op (cons 'req-ctx (lambda (form ctx) . body)))]
     [(_ op op2); alias
                  (vise-register-renderer! 'op (or (vise-lookup-macro 'op2)
                                                 (vise-error "unknown vise renderer:~a" 'op2)))]))
@@ -199,10 +209,10 @@
           [(boolean? exp) (if exp 1 0)]
           [else exp])))))
 
-(define-vise-renderer (quote form ctx)
+(define-vise-renderer (quote form ctx) expr
   (render-literal (cadr form) ctx))
 
-(define-vise-renderer (defun form ctx)
+(define-vise-renderer (defun form ctx) stmt
   (define (gen-args args)
     ($ (cut string-join <> ",")
       $ map (lambda (sym) 
@@ -314,11 +324,11 @@
     (unless (null? self-rec)
       (print #`"let ,(vim-symbol sym)[',(vim-symbol sym)'] = ,(vim-symbol sym)"))))
 
-(define-vise-renderer (defvar form ctx)
+(define-vise-renderer (defvar form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (render-symbol-bind (cadr form) (caddr form)))
 
-(define-vise-renderer (lambda form ctx)
+(define-vise-renderer (lambda form ctx) expr
   (define (find-free exp vars)
     (find-symbol-recursion
       (lambda (exp vars)
@@ -350,7 +360,7 @@
         "," 'prefix))
     (display "}")))
 
-(define-vise-renderer (let form ctx)
+(define-vise-renderer (let form ctx) stmt
   (define (all-ref-only? vars)
     (every
       (lambda (var) (env-data-ref-only? (env-find-data (@ var.env) var)))
@@ -402,7 +412,7 @@
       (vise-render 'stmt `(begin ,@(cddr form))))))
 
 
-(define-vise-renderer (begin form ctx)
+(define-vise-renderer (begin form ctx) stmt
   (if (expr-ctx? ctx)
     (let1 func-name (gensym "s:begin")
       (add-auto-generate-exp
@@ -416,7 +426,7 @@
         (add-new-line))
       (cdr form))))
 
-(define-vise-renderer (if form ctx)
+(define-vise-renderer (if form ctx) stmt
   (if (expr-ctx? ctx)
     (match form
       [(?: test then else)
@@ -452,7 +462,7 @@
            (add-new-line)
            (print "endif")))])))
 
-(define-vise-renderer (try form ctx)
+(define-vise-renderer (try form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (print "try")
   (add-indent (vise-render ctx (cadr form)))
@@ -473,7 +483,7 @@
   (add-new-line)
   (print "endtry"))
 
-(define-vise-renderer (dolist form ctx)
+(define-vise-renderer (dolist form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (render-symbol-bind (caadr form) (cadadr form) #t)
   (add-indent
@@ -481,7 +491,7 @@
   (add-new-line)
   (print "endfor"))
 
-(define-vise-renderer (while form ctx)
+(define-vise-renderer (while form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (match form
     [(_ test . body)
@@ -493,7 +503,7 @@
      (add-new-line)
      (print "endwhile")]))
 
-(define-vise-renderer (list-func form ctx)
+(define-vise-renderer (list-func form ctx) expr
   (define (find-free found-action exp :optional (vars '()))
     (find-symbol-recursion 
       (lambda (exp vars)
@@ -537,7 +547,7 @@
   (display "\")")
   (add-new-line))
 
-(define-vise-renderer (return form ctx)
+(define-vise-renderer (return form ctx) stmt
   (ensure-stmt-ctx form ctx)
   (match form
     [(_ expr) 
@@ -547,17 +557,17 @@
     [(_)
      (print "return")]))
 
-(define-vise-renderer (break form ctx)
+(define-vise-renderer (break form ctx) stmt
   (ensure-stmt-ctx form ctx)
   (match form
     [(_) (print "break")]))
 
-(define-vise-renderer (continue form ctx)
+(define-vise-renderer (continue form ctx) stmt
   (ensure-stmt-ctx form ctx)
   (match form
     [(_) (print "continue")]))
 
-(define-vise-renderer (set! form ctx)
+(define-vise-renderer (set! form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (match form
     [(_ var val)
@@ -571,7 +581,7 @@
 (define-macro (define-vim-cmd op sop)
   `(begin
      (set! vim-cmd-list (cons (string->symbol ,sop) vim-cmd-list))
-     (define-vise-renderer (,op form ctx)
+     (define-vise-renderer (,op form ctx) stmt
        (ensure-stmt-or-toplevel-ctx form ctx)
        (display ,sop)
        (display (string-join
@@ -606,7 +616,7 @@
 ;(define-vim-cmd keymap "key")
 
 (set! vim-cmd-list (cons 'vim-cmd vim-cmd-list))
-(define-vise-renderer (vim-cmd form ctx)
+(define-vise-renderer (vim-cmd form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (vise-render 'expr (cadr form))
   (display (string-join
@@ -616,7 +626,7 @@
              " " 'prefix))
   (add-new-line))
 
-(define-vise-renderer (dict form ctx)
+(define-vise-renderer (dict form ctx) expr
   (ensure-expr-ctx form ctx)
   (display "{")
   (display (string-join 
@@ -631,7 +641,7 @@
              ","))
   (display "}"))
 
-(define-vise-renderer (augroup form ctx)
+(define-vise-renderer (augroup form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (display "augroup ")
   (let1 next (if (vsymbol? (cadr form))
@@ -647,7 +657,7 @@
     (add-new-line)
     (print "augroup END")))
 
-(define-vise-renderer (autocmd form ctx)
+(define-vise-renderer (autocmd form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (display "autocmd ")
   (unless (eq? 'default (vexp (cadr form)))
@@ -665,7 +675,7 @@
   (vise-render 'stmt (cadr (cddddr form)))
   (add-new-line))
 
-(define-vise-renderer (setlocal form ctx)
+(define-vise-renderer (setlocal form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (match form
     [(_ sym)
@@ -684,7 +694,7 @@
 ;;
 ;;
 (define-macro (define-nary op sop)
-  `(define-vise-renderer (,op form ctx)
+  `(define-vise-renderer (,op form ctx) expr
      (ensure-expr-ctx form ctx)
      (match form
        [(_ a)
@@ -713,7 +723,7 @@
 (define-nary or  "||")
 
 (define-macro (define-unary op sop)
-  `(define-vise-renderer (,op form ctx)
+  `(define-vise-renderer (,op form ctx) expr
      (ensure-expr-ctx form ctx)
      (match form
        [(_ a)
@@ -725,7 +735,7 @@
 (define-unary &      "&")               ; only unary op
 
 (define-macro (define-binary op sop :optional (context 'expr))
-  `(define-vise-renderer (,op form ctx)
+  `(define-vise-renderer (,op form ctx) ,context
      ,(if (eq? context 'expr)
         '(ensure-expr-ctx form ctx)
         '(ensure-stmt-or-toplevel-ctx form ctx))
@@ -773,7 +783,7 @@
 (define-binary |!~#| "!~#")
 (define-binary |!~?| "!~?")
 
-(define-vise-renderer (ref form ctx)
+(define-vise-renderer (ref form ctx) expr
   (define (render-index i) 
     (display "[")
     (let1 i (if (and (list? i) (eq? 'quote (vexp (car i))))
@@ -788,7 +798,7 @@
      (render-index i1)
      (for-each render-index i2)]))
 
-(define-vise-renderer (subseq form ctx)
+(define-vise-renderer (subseq form ctx) expr
   (ensure-expr-ctx form ctx)
   (match form
     [(_ seq)
@@ -817,11 +827,11 @@
                 (substring str 1 (- (string-length str) 1))))
      (display delimiter)]))
 
-(define-vise-renderer (qq-str form ctx)
+(define-vise-renderer (qq-str form ctx) expr
   (ensure-expr-ctx form ctx)
   (**-str form "`"))
 
-(define-vise-renderer (qq= form ctx)
+(define-vise-renderer (qq= form ctx) expr
   (ensure-expr-ctx form ctx)
   (match form
     [(_ exp)
@@ -829,7 +839,7 @@
      (vise-render-expr exp)
      (display "`")]))
 
-(define-vise-renderer (sq-str form ctx)
+(define-vise-renderer (sq-str form ctx) expr
   (ensure-expr-ctx form ctx)
   (**-str form "'"))
 

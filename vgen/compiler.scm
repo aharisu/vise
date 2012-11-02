@@ -292,6 +292,11 @@
 ;;Compile
 ;;----------
 
+(define (p-ret e)
+  (display e (standard-output-port))
+  (newline (standard-output-port))
+  e)
+
 (define (vise-error msg . obj)
   (let1 obj (map
               (lambda (obj)
@@ -423,7 +428,7 @@
      (case (get-symbol (car exp))
        [(defun let lambda)
         `(,@(drop-right exp 1)
-           ,(find-tail-exp action 'stmt (last (cddr exp))))]
+           ,(find-tail-exp action 'stmt (last exp)))]
        [(begin and or) 
         `(,@(drop-right exp 1)
            ,(find-tail-exp action 
