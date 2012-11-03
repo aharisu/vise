@@ -865,6 +865,10 @@
   (ensure-expr-ctx form ctx)
   (**-str form "'" identity))
 
+(define-vise-renderer (key-str form ctx) expr
+  (ensure-expr-ctx form ctx)
+  (**-str form "\"" identity))
+
 ;;
 ;;
 ;;Util
