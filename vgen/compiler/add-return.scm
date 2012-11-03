@@ -6,13 +6,18 @@
       (lambda . ,(pa$ add-return #t))
       (let . ,(pa$ add-return #t)))))
 
+(define (return-add? exp ctx)
+  (and (eq? ctx 'stmt) 
+    (or (not (list? exp)) 
+      (eq? (vise-lookup-renderer-ctx (car exp)) 'expr)
+      (find (pa$ eq? (vexp (car exp))) vim-symbol-list))))
+
 (define (add-return lambda? form ctx loop)
   (let1 ret (let1 env (slot-ref (car form) 'env)
               `(,@(drop-right form 1)
                  ,(find-tail-exp
                     (lambda (exp ctx)
-                      (if (and (eq? ctx 'stmt) 
-                            (or (not (list? exp)) (eq? (vise-lookup-renderer-ctx (car exp)) 'expr) ))
+                      (if (return-add? exp ctx)
                         (list (make <vsymbol> :exp 'return :env env) exp)
                         exp))
                     'stmt

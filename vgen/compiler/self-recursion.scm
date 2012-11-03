@@ -97,8 +97,7 @@
                            ,@(map 
                                (lambda (arg bind) `(set! ,arg ,bind))
                                args (cdr exp))))]
-                    [(and (eq? ctx 'stmt) 
-                       (or (not (list? exp)) (eq? (vise-lookup-renderer-ctx (car exp)) 'expr)))
+                    [(return-add? exp ctx)
                      (list 
                        (make <vsymbol> :exp 'return :env injection-env)
                        exp)]
