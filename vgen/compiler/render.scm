@@ -596,7 +596,6 @@
                   " " 'prefix))
        (add-new-line))))
 
-(define-vim-cmd call "call")
 (define-vim-cmd echo "echo")
 (define-vim-cmd echon "echon")
 (define-vim-cmd echohl "echohl")
@@ -617,6 +616,7 @@
 (define-vim-cmd edit "edit")
 (define-vim-cmd setlocal "setlocal")
 (define-vim-cmd source "source")
+(define-vim-cmd autocmd! "autocmd!")
 ;;TODO
 ;(define-vim-cmd keymap "key")
 
