@@ -413,23 +413,16 @@
 
 
 (define-vise-renderer (begin form ctx) stmt
-  (if (expr-ctx? ctx)
-    (let1 func-name (gensym "s:begin")
-      (add-auto-generate-exp
-        func-name
-        `(defun ,func-name () :normal ,@(cdr form)))
-      (display func-name)
-      (display "()"))
-    (for-each
-      (lambda (exp)
-        (vise-render ctx exp)
-        (add-new-line))
-      (cdr form))))
+  (for-each
+    (lambda (exp)
+      (vise-render ctx exp)
+      (add-new-line))
+    (cdr form)))
 
 (define-vise-renderer (if form ctx) stmt
   (if (expr-ctx? ctx)
     (match form
-      [(?: test then else)
+      [(_ test then else)
        (display "((")
        (vise-render 'expr test)
        (display ")?")

@@ -374,7 +374,7 @@
     [_ (vise-error "Bad let syntax:~a" exp)]))
 
 (define (expand-begin env ctx parent exp)
-  (if (eq? ctx 'expr)
+  (if (and (eq? ctx 'expr) (< 1 (length (cdr exp))))
     (expand-expression env 'expr parent `((lambda () ,@(cdr exp))))
     (cons 
       (make <vsymbol> :exp (car exp) :env env
