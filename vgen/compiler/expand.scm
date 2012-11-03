@@ -174,6 +174,29 @@
     env
     (let1 sym expr . body)
     `(let ((,sym ,expr)) ,@body))
+  ;;if-let1
+  (register-macro
+    env
+    if-let1
+    (match
+      [(_ sym expr then else)
+       `(let1 ,sym ,expr
+          (if ,sym ,then ,else))]
+      [(_ sym expr then)
+       `(let1 ,sym ,expr
+          (if ,sym ,then))]))
+  ;;rlet1
+  (register-macro
+    env
+    (rlet1 sym expr . body)
+    `(let1 ,sym ,expr ,@body (return ,sym)))
+  ;;begin0
+  (register-macro
+    env
+    (begin0 exp1 . expn)
+    (let1 temp (gensym "temp")
+      `(rlet1 ,temp ,exp1
+         ,@expn)))
   )
 
 (define (constract-proc-args proc-env arg)
