@@ -428,7 +428,8 @@
   (for-each
     (lambda (exp)
       (vise-render ctx exp)
-      (add-new-line))
+      (unless (eq? ctx 'expr)
+        (add-new-line)))
     (cdr form)))
 
 (define-vise-renderer (if form ctx) stmt
