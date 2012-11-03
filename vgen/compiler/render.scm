@@ -105,9 +105,8 @@
     (add-auto-generate-exp 
       'sid-prefix
       `(defun ,sid-prefix-symbol () :normal
-              (let ((s (matchstr (expand (sq-str "<sfile>"))
-                                 '|'<SNR>\\d\\+_\\zeSID_PREFIX$'|)))
-                (return (if (empty s) "s:" s))))))
+              (return (matchstr (expand (sq-str "<sfile>"))
+                                (sq-str ,#`"<SNR>\\d\\+_\\ze,(remove-symbol-prefix sid-prefix-symbol)$"))))))
   sid-prefix-symbol)
 
 (define-constant temp-symbol (gensym "temp_"))
