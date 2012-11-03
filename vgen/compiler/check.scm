@@ -78,7 +78,7 @@
                   ;;Vim embedded symbol?
                   (or (eq? (string-ref symbol 0) #\&)
                     ;;global or window or buffer scope?
-                    (or* string=? (substring symbol 0 2) "g:" "v:" "w:" "b:")))
+                    (or* string=? (substring symbol 0 2) "g:" "v:" "w:" "b:" "a:")))
                 (cmd-symbol? symbol));refer name space?
         (vise-error "Compiler: ~a reference does not exist.~a" 
                     vsymbol (@ vsymbol.parent))))))
