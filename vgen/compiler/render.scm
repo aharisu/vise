@@ -16,7 +16,12 @@
                (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
                  (when (and d outside? (eq? (@ d.scope) 'local))
                    (attr-push! d 'free))))
-             form))))
+             form))
+      (,traverse-apply-function-hook
+        . ,(lambda (form ctx loop)
+             (when (vsymbol? (car form))
+               (attr-push! (car form) 'function-call))
+             (map (pa$ loop 'expr) form)))))
   (let loop ((exp exp)
              (acc '()))
     (parameterize ([auto-generate-exp '()])
@@ -63,17 +68,27 @@
       (has-attr? d 'free)
       (not (env-data-ref-only? d)))))
 
+(define (vim-function-ref func-name)
+  #`"function(,(get-sid-prefix-symbol)() . ',(remove-symbol-prefix func-name)')")
+
 (define (vim-ref-symbol symbol)
-  (let1 sym (vim-symbol symbol)
-    (receive (d outside?) (if (vsymbol? symbol)
-                            (env-find-data-with-outside-lambda? (@ symbol.env) symbol)
-                            (values #f #f))
-      (let1 sym (if (and d outside? (eq? (@ d.scope) 'local))
-                  (string-append "self['" sym "']")
-                  sym)
-        (if (boxing? symbol) 
-          (vim-unboxing sym)
-          sym)))))
+  (receive (d outside?) (if (vsymbol? symbol)
+                          (env-find-data-with-outside-lambda? (@ symbol.env) symbol)
+                          (values #f #f))
+    ($ (lambda (sym)
+         (if (boxing? symbol)
+           (vim-unboxing sym)
+           sym))
+      $ (lambda (sym)
+          (if (and d (has-attr? d 'function) (not (has-attr? symbol 'function-call)))
+            (vim-function-ref sym)
+            sym))
+      $ (lambda (sym)
+          (if (and d outside? (eq? (@ d.scope) 'local))
+            (string-append "self['" sym "']")
+            sym))
+      $ vim-symbol
+      symbol)))
 
 (define dict-type-symbol #f)
 (define (get-dict-type-symbol)
@@ -84,7 +99,7 @@
   dict-type-symbol)
 
 (define sid-prefix-symbol #f)
-(define (get-sid-preifx-symbol)
+(define (get-sid-prefix-symbol)
   (unless sid-prefix-symbol
     (set! sid-prefix-symbol (gensym "s:SID_PREFIX_"))
     (add-auto-generate-exp 
@@ -344,11 +359,8 @@
     (add-auto-generate-exp 
       func-name
       `(defun ,func-name ,(cadr form) :dict ,@(cddr form)))
-    (display "{'func':function(")
-    (display (get-sid-preifx-symbol))
-    (display "() . '")
-    (display (remove-symbol-prefix func-name))
-    (display "')")
+    (display "{'func':")
+    (display (vim-function-ref func-name))
     (display
       (string-join
         (map
