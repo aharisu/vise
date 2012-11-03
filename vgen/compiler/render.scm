@@ -524,7 +524,7 @@
   (display (cadr form))
   (display "(")
   (vise-render 'expr (caddr form))
-  (display ",\"")
+  (display ",\'")
   (if (eq? 'lambda (vexp (car (cadddr form))))
     (let* ([lambda-form (cadddr form)]
            [lambda-env (slot-ref (caadr lambda-form) 'env)]
@@ -549,7 +549,7 @@
                                   :env (slot-ref (car form) 'env)))
                           free))))
     (vise-render 'expr (cadddr form)))
-  (display "\")")
+  (display "\')")
   (add-new-line))
 
 (define-vise-renderer (return form ctx) stmt
