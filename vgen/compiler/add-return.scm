@@ -9,7 +9,7 @@
 (define (return-add? exp ctx)
   (and (eq? ctx 'stmt) 
     (or (not (list? exp)) 
-      (eq? (vise-lookup-renderer-ctx (car exp)) 'expr)
+      (not (eq? (vise-lookup-renderer-ctx (car exp)) 'stmt))
       (find (pa$ eq? (vexp (car exp))) vim-symbol-list))))
 
 (define (add-return lambda? form ctx loop)
@@ -25,12 +25,16 @@
     (if lambda?
       `(,(car ret)
          ,(cadr ret)
-         ,@(drop-right (cddr ret) 1)
-         ,(loop 'stmt (last ret)))
+         ,@(sexp-traverse
+             (drop-right (cddr ret) 1)
+             `((lambda . ,(pa$ add-return #t))))
+         ,(loop 'stmt (last (cddr ret))))
       `(,(car ret)
          ,(cadr ret)
          ,(caddr form)
          ,(cadddr form)
-         ,@(drop-right (cddddr ret) 1)
-         ,(loop 'stmt (last ret))))))
+         ,@(sexp-traverse
+             (drop-right (cddddr ret) 1)
+             `((lambda . ,(pa$ add-return #t))))
+         ,(loop 'stmt (last (cddddr ret)))))))
 
