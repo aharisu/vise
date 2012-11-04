@@ -16,7 +16,7 @@
        [(defmacro) ;top level
         (unless (env-toplevel? env)
           (vise-error "Compiler: defmacro can only be defined at top level:~a" exp))
-        (register-macro env (cdr exp))
+        (eval `(register-macro ,env ,@(cdr exp)) (current-module))
         #f]
        [(defun) ;top level
         (unless (env-toplevel? env)
@@ -58,6 +58,9 @@
     [(symbol? exp) (expand-refer-symbol env ctx parent exp)]
     [else exp]))
 
+(define (expand-defmacro env op arg body)
+  (eval `(register-macro ,env (,op ,@arg) ,@body) (current-module)))
+
 (define-syntax register-macro
   (syntax-rules (match)
     ;; recursion
@@ -78,7 +81,10 @@
     [(_ env op (match (pat . body) . clauses)) ; (pat . body) rules out a single symbol
      (register-macro env "clauses" op ((pat . body)) clauses)]
     [(_ env op (arg ...) . body)
-     (register-macro env (op arg ...) . body)]))
+     (register-macro env (op arg ...) . body)]
+    [(_ env op arg . body)
+     (expand-defmacro env 'op 'arg 'body)]))
+
 
 (define (check-lambda-for-list-fnction form proc . require-args)
   (if (and (list? proc) (eq? (car proc) 'lambda))
