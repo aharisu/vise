@@ -38,7 +38,7 @@
        [(set!) (check-set! nest-quasiquote exp)]
        [(let) (check-let nest-quasiquote exp)]
        [(dolist) (check-dolist nest-quasiquote exp)]
-       [(while begin and or)
+       [(while begin and or raw-vimscript)
         (for-each
           (pa$ check-expression nest-quasiquote)
           (cdr exp))]

@@ -270,6 +270,12 @@
   (unless (rxmatch #/\n$/ (car (@ port.prev)))
     (newline port)))
 
+(define (get-indent-level :optional (port (current-output-port)))
+  (car (@ port.indent)))
+
+(define (set-indent-level! indent :optional (port (current-output-port)))
+  (set-car! (@ port.indent) indent))
+
 (define-macro (add-indent . body)
   `(unwind-protect
      (begin 
@@ -386,7 +392,7 @@
                (car form) ;name
                (loop 'expr (cadr form)))
              (map (pa$ loop 'stmt) (cddr form)))]
-          [(begin and or quasiquote unquote unquote-splicing augroup)
+          [(begin and or quasiquote unquote unquote-splicing augroup raw-vimscript)
            (append
              (cons (car form) '()) ;name
              (map (pa$ loop (if (or* eq? (vexp (car form)) 'and 'or) 'expr ctx)) 
@@ -459,7 +465,8 @@
                    clause))
                (cddr exp)))]
        [else 
-         (if (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+         (if (or (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+               (eq? 'raw-vimscript (get-symbol (car exp))))
            exp
            (action exp ctx))])]
     [else (action exp ctx)]))

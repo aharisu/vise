@@ -206,22 +206,19 @@
 ;;
 
 (define (render-literal exp ctx)
-  (if (and (or (stmt-ctx? ctx) (toplevel-ctx? ctx)) (string? exp))
-    (print exp) ;;raw VimScript
-    (begin
-      (ensure-expr-ctx exp ctx)
-      (display
-        (cond
-          [(list? exp)
-           (string-append
-             "["
-             (string-join 
-               (map (pa$ vise-render-to-string 'expr) exp) 
-               ",")
-             "]")]
-          [(string? exp) (write-to-string exp)]
-          [(boolean? exp) (if exp 1 0)]
-          [else exp])))))
+  (ensure-expr-ctx exp ctx)
+  (display
+    (cond
+      [(list? exp)
+       (string-append
+         "["
+         (string-join 
+           (map (pa$ vise-render-to-string 'expr) exp) 
+           ",")
+         "]")]
+      [(string? exp) (write-to-string exp)]
+      [(boolean? exp) (if exp 1 0)]
+      [else exp])))
 
 (define-vise-renderer (quote form ctx) expr
   (render-literal (cadr form) ctx))
@@ -581,6 +578,21 @@
      (display " = ")
      (vise-render 'expr val)]
     [_   (vise-error "uneven args for set!:~a" form)]))
+
+(define-vise-renderer (raw-vimscript form ctx) expr
+  (when (eq? ctx 'stmt)
+    (add-new-line))
+  (let1 indent-level (get-indent-level)
+    (set-indent-level! 0)
+    (for-each
+      (lambda (exp)
+        (if (string? exp)
+          (display exp)
+          (vise-render-expr exp)))
+      (cdr form))
+    (set-indent-level! indent-level))
+  (when (eq? ctx 'stmt)
+    (add-new-line)))
 
 (define vim-cmd-list '())
 (define-macro (define-vim-cmd op sop)

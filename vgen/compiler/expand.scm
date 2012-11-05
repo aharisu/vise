@@ -35,12 +35,12 @@
                 :debug-info (debug-source-info exp))
             (expand-expression env 'expr exp (cadr exp)))
           (map (pa$ expand-expression env 'stmt exp) (cddr exp)))]
-       [(and or quasiquote unquote unquote-splicing augroup)
+       [(and or quasiquote unquote unquote-splicing augroup raw-vimscript)
         (cons 
           (make <vsymbol> :exp (car exp) :env env
                 :debug-info (debug-source-info exp))
           (map (pa$ expand-expression env 
-                    (if (or* eq? (car exp) 'and 'or) 'expr ctx)
+                    (if (or* eq? (car exp) 'and 'or 'raw-vimscript) 'expr ctx)
                     exp)
                (cdr exp)))]
        [(begin) (expand-begin env ctx parent exp)]

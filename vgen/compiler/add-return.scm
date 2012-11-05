@@ -9,8 +9,9 @@
 (define (return-add? exp ctx)
   (and (eq? ctx 'stmt) 
     (or (not (list? exp)) 
-      (not (eq? (vise-lookup-renderer-ctx (car exp)) 'stmt))
-      (find (pa$ eq? (vexp (car exp))) vim-symbol-list))))
+      (and (not (eq? (vexp (car exp)) 'raw-vimscript))
+        (or (not (eq? (vise-lookup-renderer-ctx (car exp)) 'stmt))
+          (find (pa$ eq? (vexp (car exp))) vim-symbol-list))))))
 
 (define (add-return lambda? form ctx loop)
   (let1 ret (let1 env (slot-ref (car form) 'env)
