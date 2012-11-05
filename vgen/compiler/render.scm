@@ -908,13 +908,9 @@
 (define (vise-render-identifier sym)
   (vise-safe-name-friendly (x->string sym)))
 
-(define (substring* str start end)
-  (let1 len (string-length str)
-    (substring str start (if (< len end) len end))))
-
 (define (vise-safe-name-friendly str)
   (receive (prefix str) (cond
-                          [(or* string=? (substring* str 0 2) "@@" "g:" "s:" "v:" "b:" "w:" "a:")
+                          [(or* string=? (substring* str 0 2) "@@" "g:" "s:" "v:" "b:" "w:" "l:" "a:")
                            (values (substring* str 0 2) (substring str 2 (string-length str)))]
                           [(or* eq? (string-ref str 0) #\& #\@)
                            (values (x->string (string-ref str 0)) (substring str 1 (string-length str)))]

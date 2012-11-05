@@ -119,6 +119,7 @@
   (cond
     [(or (eq? scope 'syntax) (cmd-symbol? sym)) (x->string sym)]
     [(and (eq? scope 'arg) (set-exists attr 'rest)) "a:000"]
+    [(string=? (substring* (x->string sym) 0 2) "l:") (x->string sym)]
     [else 
       (let ((prefix (case scope
                       ((arg) #\a)

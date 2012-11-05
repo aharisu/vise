@@ -234,6 +234,7 @@
            [(eq? prefix #\s) 'script]
            [(eq? prefix #\w) 'window]
            [(eq? prefix #\b) 'buffer]
+           [(eq? prefix #\l) 'local]
            [else (vise-error "Unkown name scope:~a ~a" name exp)]))]
       [else 'script])))
 

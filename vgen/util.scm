@@ -51,3 +51,8 @@
   (let1 x-sym (gensym)
     `(let1 ,x-sym ,x
        (or ,@(map (lambda (y) `(,test ,x-sym ,y)) any)))))
+
+(define (substring* str start end)
+  (let1 len (string-length str)
+    (substring str start (if (< len end) len end))))
+
