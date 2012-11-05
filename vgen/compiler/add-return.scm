@@ -27,15 +27,13 @@
       `(,(car ret)
          ,(cadr ret)
          ,@(sexp-traverse
-             (drop-right (cddr ret) 1)
-             `((lambda . ,(pa$ add-return #t))))
-         ,(loop 'stmt (last (cddr ret))))
+             (cddr ret)
+             `((lambda . ,(pa$ add-return #t)))))
       `(,(car ret)
          ,(cadr ret)
          ,(caddr form)
          ,(cadddr form)
          ,@(sexp-traverse
-             (drop-right (cddddr ret) 1)
-             `((lambda . ,(pa$ add-return #t))))
-         ,(loop 'stmt (last (cddddr ret)))))))
+             (cddddr ret)
+             `((lambda . ,(pa$ add-return #t))))))))
 
