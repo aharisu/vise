@@ -17,7 +17,8 @@
             [out-port (if out (open-output-file out) (standard-output-port))])
         (unwind-protect
           (vise-compile in-port :out-port out-port
-                        :load-path (reverse! loadpath))
+                        :load-path (reverse! loadpath)
+                        :prologue "\" Generated automatically DO NOT EDIT\n\n")
           (begin
             (close-input-port in-port)
             (close-output-port out-port))))))

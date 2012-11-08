@@ -496,7 +496,9 @@
 
 (define (vise-compile in-port 
                       :key (out-port (current-output-port))
-                      (load-path '()))
+                      (load-path '())
+                      (prologue "")
+                      (epilogue ""))
   (let* ((global-env (rlet1 env (make-env #f)
                        (hash-table-for-each
                          renderer-table
@@ -518,5 +520,7 @@
     (with-output-to-port
       out-port
       (lambda ()
-        (for-each print exp-list)))))
+        (display prologue)
+        (for-each print exp-list)
+        (display epilogue)))))
 
