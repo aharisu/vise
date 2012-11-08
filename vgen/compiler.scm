@@ -154,10 +154,6 @@
    (lambda-border? :init-keyword :lambda-border?)
    )
   )
-(define-method write-object ((env <env>) port)
-  (with-output-to-port 
-    port
-    (pa$ print-env-table env)))
 
 (define (make-env parent :optional (lambda-border? #f))
   (rlet1 env (make <env> 
