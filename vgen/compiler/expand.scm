@@ -316,6 +316,8 @@
   (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
     (match (cdr exp)
       [(pred then)
+       (when (eq? ctx 'expr)
+         (vise-error "Expression context if, else clause require:~a" exp))
        (list (make <vsymbol> :exp (car exp) :env env  ;if
                    :debug-info (debug-source-info exp))
              (expand-expression env 'expr exp (cadr exp)) ;pred

@@ -21,6 +21,18 @@
 ;;Util Type
 ;;-------------
 
+(define (get-evaluated-exp e)
+  (cond
+    [(and (list? e) (eq? (vexp (car e)) 'quote)
+       (not (symbol? (vexp (cdar e)))))
+     (cadr e)]
+    [(vsymbol? e) 
+     (let1 d (env-find-data (@ e.env) e)
+       (if (and d (not (eq? env-data-none-exp (@ d.exp))))
+         (get-evaluated-exp (@ d.exp))
+         e))]
+    [else e]))
+
 ;;
 ;; <vexp>
 (define-class <vexp> ()
@@ -66,6 +78,8 @@
   )
 
 (define vmacro? (cut is-a? <> <vmacro>))
+
+(define-constant env-data-none-exp (gensym))
 
 ;;;;;
 ;;refer data
@@ -165,7 +179,7 @@
 (define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
 
 (define (env-add-symbol env symbol scope :key (attr '()))
-  (env-add-symbol&exp env symbol scope #f :attr attr))
+  (env-add-symbol&exp env symbol scope env-data-none-exp :attr attr))
 
 (define (env-add-symbol&exp env symbol scope exp :key (attr '()))
   (let1 symbol (get-symbol symbol)

@@ -1,5 +1,9 @@
 
 (define (vise-phase-erase form-list)
+  (sexp-traverse
+    form-list
+    `((defvar . ,erase-sym-bind-defvar)
+      (let . ,erase-sym-bind-let)))
   (parameterize ([erased-flag #f])
     (let1 form-list (filter-map
                       (erase-filter 'toplevel #f)
@@ -7,6 +11,38 @@
       (if (erased-flag)
         (vise-phase-erase form-list)
         form-list))))
+
+(define (erase-sym-bind-defvar form ctx loop)
+  (erase-sym-bind (cadr form) (caddr form))
+  (loop 'expr (caddr form)))
+
+(define (erase-sym-bind-let form ctx loop)
+  (for-each
+    (lambda (clause) 
+      (erase-sym-bind (car clause) (cadr clause))
+      (list (car clause) (loop 'expr (cadr clause))))
+    (cadr form))
+  (for-each (pa$ loop 'stmt) (cddr form)))
+
+(define (erase-is-literal? form)
+  (cond
+    [(list? form) 
+     (case (vexp (car form))
+       [(quote lambda) #t]
+       [else #f])]
+    [(vsymbol? form) 
+     (if-let1 d (env-find-data (@ form.env) form)
+       (if (vsymbol? (@ d.exp))
+         (erase-is-literal? (@ d.exp))
+         (not (eq? env-data-none-exp (@ d.exp))))
+       #f)]
+    [(symbol? form) #f]
+    [else #t]))
+
+(define (erase-sym-bind sym exp)
+  (let1  d (and (vsymbol? sym) (env-find-data (@ sym.env) sym))
+    (when (and d (env-data-ref-only? d))
+      (@! d.exp exp))))
 
 (define-constant exp-erased (gensym))
 (define erased-flag (make-parameter #f))
@@ -46,13 +82,6 @@
     [(vsymbol? form) (erase-refer-symbol ctx parent form)]
     [else form]))
 
-(define (erase-is-literal? form)
-  (if (list? form) 
-    (case (vexp (car form))
-      [(quote lambda) #t]
-      [else #f])
-    #t))
-
 (define (erase-defun ctx parent form)
   `(,(car form);defun
      ,(cadr form);name
@@ -74,17 +103,31 @@
      ,@(filter-map (erase-filter 'stmt form) (cddr form))))
 
 (define (erase-if ctx parent form)
-  (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
-    (if (null? (cdddr form))
-      (list
-        (car form)
-        (erase-expression 'expr form (cadr form))
-        (erase-expression cctx form (caddr form)))
-      (list
-        (car form)
-        (erase-expression 'expr form (cadr form))
-        (erase-expression cctx form (caddr form))
-        (erase-expression cctx form (cadddr form))))))
+  (let1 frm (filter
+              (lambda (e)
+                (if (eq? exp-erased e)
+                  (mark-erase #f)
+                  e))
+              (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+                (if (null? (cdddr form))
+                  (list
+                    (car form)
+                    (erase-expression 'expr form (cadr form))
+                    (erase-expression cctx form (caddr form)))
+                  (list
+                    (car form)
+                    (erase-expression 'expr form (cadr form))
+                    (erase-expression cctx form (caddr form))
+                    (erase-expression cctx form (cadddr form))))))
+    (if (erase-is-literal? (cadr frm))
+      (mark-erase
+        (begin
+          (if-let1 d (and (vsymbol? (cadr frm)) (env-find-data (slot-ref (cadr frm) 'env) (cadr frm)))
+            (@dec! d.ref-count))
+          (if (or* eq? (get-evaluated-exp (cadr frm)) #f 0)
+            (if (null? (cdddr frm)) exp-erased (cadddr frm)) ;;get else
+            (caddr frm)))) ;;get then
+      frm)))
 
 (define (erase-set! ctx parent form)
   (list
@@ -109,7 +152,7 @@
 (define (erase-while ctx parent form)
   `(,(car form) ;name
      ,(erase-expression 'expr form (cadr form))
-  ,@(filter-map (erase-filter 'stmt form) (cddr form))))
+     ,@(filter-map (erase-filter 'stmt form) (cddr form))))
 
 (define (erase-begin-or-and ctx parent form)
   `(,(car form) ;name
