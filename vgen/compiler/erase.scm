@@ -31,7 +31,7 @@
        [(quote lambda) #t]
        [else #f])]
     [(vsymbol? form) 
-     (if-let1 d (env-find-data (@ form.env) form)
+     (if-let1 d (env-find-data form)
        (if (vsymbol? (@ d.exp))
          (erase-is-literal? (@ d.exp))
          (not (eq? env-data-none-exp (@ d.exp))))
@@ -40,7 +40,7 @@
     [else #t]))
 
 (define (erase-sym-bind sym exp)
-  (let1  d (and (vsymbol? sym) (env-find-data (@ sym.env) sym))
+  (let1  d (and (vsymbol? sym) (env-find-data sym))
     (when (and d (env-data-ref-only? d))
       (@! d.exp exp))))
 
@@ -122,7 +122,7 @@
     (if (erase-is-literal? (cadr frm))
       (mark-erase
         (begin
-          (if-let1 d (and (vsymbol? (cadr frm)) (env-find-data (slot-ref (cadr frm) 'env) (cadr frm)))
+          (if-let1 d (and (vsymbol? (cadr frm)) (env-find-data (cadr frm)))
             (@dec! d.ref-count))
           (if (or* eq? (get-evaluated-exp (cadr frm)) #f 0)
             (if (null? (cdddr frm)) exp-erased (cadddr frm)) ;;get else
@@ -176,7 +176,7 @@
                  [acc '()])
         (if (null? vars)
           (reverse! acc)
-          (let1 d (and (vsymbol? (caar vars)) (env-find-data (slot-ref (caar vars) 'env) (caar vars)))
+          (let1 d (and (vsymbol? (caar vars)) (env-find-data (caar vars)))
             (loop (cdr vars)
                   (if (and d (env-data-not-use? d) (erase-is-literal? (cadar vars)))
                     (mark-erase acc) ;erase var decl

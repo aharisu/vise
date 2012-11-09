@@ -27,7 +27,7 @@
        (not (symbol? (vexp (cdar e)))))
      (cadr e)]
     [(vsymbol? e) 
-     (let1 d (env-find-data (@ e.env) e)
+     (let1 d (env-find-data e)
        (if (and d (not (eq? env-data-none-exp (@ d.exp))))
          (get-evaluated-exp (@ d.exp))
          e))]
@@ -143,8 +143,8 @@
                       ((buffer) #\b)
                       (else #f)))
             (name (if (set-exists attr 'func-call)
-                   (string-titlecase (x->string sym))
-                   (x->string sym))))
+                    (string-titlecase (x->string sym))
+                    (x->string sym))))
         (if prefix
           (let1 sym (x->string sym)
             (if (and (< 1 (string-length sym)) (eq? (string-ref name 1) #\:)
@@ -200,17 +200,19 @@
           (loop (@ env.parent) (or outside? (@ env.lambda-border?)))
           (values #f #f))))))
 
-(define (env-find-data env symbol)
-  (receive (d outside?) (env-find-data-with-outside-lambda? env symbol)
-    d))
+(define (env-find-data symbol :optional env)
+  (let1 env (if (undefined? env) (@ symbol.env) env)
+    (receive (d outside?) (env-find-data-with-outside-lambda? env symbol)
+      d)))
 
-(define (env-find-exp env symbol)
-  (if-let1 d (env-find-data env symbol)
-    (@ d.exp)
-    #f))
+(define (env-find-exp symbol :optional env)
+  (let1 env (if (undefined? env) (@ symbol.env) env)
+    (if-let1 d (env-find-data symbol env)
+      (@ d.exp)
+      #f)))
 
 (define (allow-rebound? vsymbol)
-  (if-let1 d (and (vsymbol? vsymbol) (env-find-data (@ vsymbol.env) vsymbol))
+  (if-let1 d (and (vsymbol? vsymbol) (env-find-data vsymbol))
     (not (or (eq? (@ d.scope) 'arg) (eq? (@ d.scope) 'syntax)))
     #t))
 

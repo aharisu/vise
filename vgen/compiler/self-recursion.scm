@@ -78,14 +78,14 @@
   (let ([args (filter-map 
                 (lambda (arg) (and (vsymbol? arg) (@ arg.exp)))
                 ((if lambda? cadr caddr) init))]
-        [self-data (env-find-data (@ sym.env) sym)]
+        [self-data (env-find-data sym)]
         [injection-env (assq-ref (slot-ref (car init) 'prop) 'injection-env)]
         [has-tail-recursion? #f])
     (let1 exp (find-tail-exp
                 (lambda (exp ctx)
                   (cond
                     [(and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
-                        (vsymbol? (car exp)) (eq? self-data (env-find-data (slot-ref (car exp) 'env) (car exp))))
+                        (vsymbol? (car exp)) (eq? self-data (env-find-data (car exp))))
                       (@dec! self-data.ref-count)
                       (set! has-tail-recursion? #t)
                       (expand-expression

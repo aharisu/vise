@@ -262,7 +262,7 @@
         (if (symbol? (cadr exp)) ;name symbol
           (rlet1 sym (make <vsymbol> :exp (cadr exp) :env env)
             (env-add-symbol env sym (get-name-scope exp (cadr exp)))
-            (attr-push! (env-find-data env sym) 'function))
+            (attr-push! (env-find-data sym env) 'function))
           (cadr exp))
         (constract-proc-args fn-env (caddr exp))) ;args
       (parse-body injection-env (cdddr exp)))))  ;body
@@ -273,7 +273,7 @@
       (rlet1 sym (make <vsymbol> :exp sym :env env)
         (env-add-symbol env sym scope)
         (when (and (list? init) (eq? (car init) 'lambda))
-          (attr-push! (env-find-data env sym) 'lambda)))
+          (attr-push! (env-find-data sym env) 'lambda)))
       sym))
   (cond
     ((symbol? sym) (to-vsymbol sym))
@@ -338,7 +338,7 @@
              :debug-info (debug-source-info exp))
        (if (symbol? sym) ;;symbol
          (rlet1 sym (make <vsymbol> :exp sym :env env)
-           (if-let1 d (env-find-data env sym)
+           (if-let1 d (env-find-data sym env)
              (@inc! d.set-count)))
          (expand-expression env 'expr exp sym))
        (expand-expression env 'expr exp e))]
@@ -469,7 +469,7 @@
         (expand-expression env 'stmt exp cmd)))))
 
 (define (expand-apply env ctx parent exp)
-  (let1 e (env-find-exp env (car exp))
+  (let1 e (env-find-exp (car exp) env)
     (if (vmacro? e)
       ;;macro expand
       (expand-expression env ctx parent ((@ e.exp) exp))
@@ -483,7 +483,7 @@
                    :exp exp
                    :env env
                    :parent parent)
-    (if-let1 d (env-find-data env sym)
+    (if-let1 d (env-find-data sym env)
       (@inc! d.ref-count))))
 
 

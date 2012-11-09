@@ -29,7 +29,7 @@
 
 (define (lambda-expand-symbol-bind sym init)
   (when (and (vsymbol? sym) (list? init) (eq? (vexp (car init)) 'lambda))
-    (let1 d (env-find-data (@ sym.env) sym)
+    (let1 d (env-find-data sym)
       (@! d.prop (cons (cons 'init-expr init) (@ d.prop))))))
 
 (define (lambda-expand-return form ctx loop)
@@ -50,7 +50,7 @@
   (define (gen-let-clause env args init)
     (let* ([rest? (and (not (null? args))
                     (let1 last (last args)
-                      (has-attr? (env-find-data (@ last.env) last) 'rest)))]
+                      (has-attr? (env-find-data last) 'rest)))]
            [len-args (- (length args) (if rest? 1 0))]
            [len-init (length init)])
       (unless ((if rest? <= =) len-args len-init)
@@ -77,13 +77,13 @@
             (lambda (v acc)
               (if-let1 inner-var (find (.$ (pa$ eq? (vexp (car v))) vexp car) acc)
                   ;;内側letの初期化式の中で使用されている外側letのシンボルを置換する
-                  (let* ([self (env-find-data (slot-ref (car v) 'env) (car v))]
+                  (let* ([self (env-find-data (car v))]
                          [init (sexp-traverse 
                                  (cadr inner-var)
                                  `((,traverse-symbol-ref
                                      . ,(lambda (form ctx loop)
                                           (if (eq? self (and (vsymbol? form)
-                                                          (env-find-data (@ form.env) form)))
+                                                          (env-find-data form)))
                                             (cadr v)
                                             form)))))])
                     ;;初期化式を置換する
@@ -105,7 +105,7 @@
 
   (let* ([sym (car form)]
          [env (and (vsymbol? sym) (slot-ref sym 'env))]
-         [d (and (vsymbol? sym) (env-find-data env sym))])
+         [d (and (vsymbol? sym) (env-find-data sym env))])
     (if (and (eq? ctx 'stmt) d (has-attr? d 'lambda) (zero? (@ d.set-count)) (= 1 (@ d.ref-count)))
       (let* ([init (assq-ref (@ d.prop) 'init-expr)]
              [lambda-arg-env (assq-ref (slot-ref (car init) 'prop) 'body-env)]

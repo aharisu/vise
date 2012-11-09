@@ -53,8 +53,7 @@
 
 (define (vim-symbol symbol)
   (vise-render-identifier
-    (if-let1 d (and (vsymbol? symbol)
-                 (env-find-data (@ symbol.env) symbol))
+    (if-let1 d (and (vsymbol? symbol) (env-find-data symbol))
       (get-vim-name d)
       (x->string symbol))))
 
@@ -62,7 +61,7 @@
   (string-append vim-symbol "[0]"))
 
 (define (boxing? symbol)
-  (let1 d (and (vsymbol? symbol) (env-find-data (@ symbol.env) symbol))
+  (let1 d (and (vsymbol? symbol) (env-find-data symbol))
     (and d 
       (eq? (@ d.scope) 'local)
       (has-attr? d 'free)
@@ -114,8 +113,7 @@
 (define (render-func-call ctx form)
   (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
         (sym (vise-render-to-string 'expr (car form)))
-        (d (and (vsymbol? (car form))
-             (env-find-data (slot-ref (car form) 'env) (car form)))))
+        (d (and (vsymbol? (car form)) (env-find-data (car form)))))
     (cond
       [(and (symbol? (vexp (car form)))
          (or (not d) (eq? (@ d.scope) 'syntax) (has-attr? d 'function)))
@@ -187,7 +185,7 @@
 (define (vise-lookup-renderer-value sym)
   (cond 
     [(vsymbol? sym)
-     (if-let1 d (env-find-data (@ sym.env) sym)
+     (if-let1 d (env-find-data sym)
        (and (eq? (@ d.scope) 'syntax) (@ d.exp))
        #f)]
     [(symbol? sym) (hash-table-get renderer-table sym #f)]
@@ -227,7 +225,7 @@
   (define (gen-args args)
     ($ (cut string-join <> ",")
       $ map (lambda (sym) 
-              (let* ([d (env-find-data (@ sym.env) sym)]
+              (let* ([d (env-find-data sym)]
                      [sym (remove-symbol-prefix (get-vim-name d))])
                 (if (has-attr? d 'rest)
                   "..."
@@ -289,7 +287,7 @@
     (if (and (list? init) (eq? 'lambda (vexp (car init))))
       (begin (when (not (vsymbol? sym))
                (vise-error "Not allow distribute binding:~a ~a" sym init))
-        (let1 self-data (env-find-data (@ sym.env) sym)
+        (let1 self-data (env-find-data sym)
           (find-symbol-recursion
             (lambda (exp vars)
               (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
@@ -371,7 +369,7 @@
 (define-vise-renderer (let form ctx) stmt
   (define (all-ref-only? vars)
     (every
-      (lambda (var) (env-data-ref-only? (env-find-data (@ var.env) var)))
+      (lambda (var) (env-data-ref-only? (env-find-data var)))
       vars))
 
   (if (expr-ctx? ctx)
@@ -386,7 +384,7 @@
                 ,(map 
                    (lambda (vars)
                      ;;chage scope local -> arg
-                     (slot-set! (env-find-data (slot-ref (car vars) 'env) (car vars)) 'scope 'arg)
+                     (slot-set! (env-find-data (car vars)) 'scope 'arg)
                      (car vars))
                    (cadr form))
                 :normal

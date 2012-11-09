@@ -69,7 +69,7 @@
      (vise-error "Compiler: Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol)
-  (unless (env-find-data (@ vsymbol.env) vsymbol)
+  (unless (env-find-data vsymbol)
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
                 (string=? "@@" symbol)
@@ -127,7 +127,7 @@
           (when (or (null? (cdr arg-cell)) (not (null? (cddr arg-cell))))
             (err "Illegal :rest parameter." args))
           (when (vsymbol? (cadr arg-cell))
-            (attr-push! (env-find-data (slot-ref (cadr arg-cell) 'env) (cadr arg-cell))
+            (attr-push! (env-find-data (cadr arg-cell))
                         'rest)))
         (when (set-exists set arg)
           (err "Duplicate arguments." args))
@@ -274,7 +274,7 @@
     (pa$ check-expression nest-level)
     exp)
   (when (vsymbol? (car exp))
-    (let1 d (env-find-data (slot-ref (car exp) 'env) (car exp))
+    (let1 d (env-find-data (car exp))
       (if (and d (not (or (eq? (@ d.scope) 'syntax)
                         (has-attr? d 'function))))
         (attr-push! d 'func-call)))))
