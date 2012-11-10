@@ -32,9 +32,9 @@
        [else #f])]
     [(vsymbol? form) 
      (if-let1 d (env-find-data form)
-       (if (vsymbol? (@ d.exp))
-         (erase-is-literal? (@ d.exp))
-         (not (eq? env-data-none-exp (@ d.exp))))
+       (if (vsymbol? (@ d.value))
+         (erase-is-literal? (@ d.value))
+         (not (eq? env-data-none-value (@ d.value))))
        #f)]
     [(symbol? form) #f]
     [else #t]))
@@ -42,7 +42,7 @@
 (define (erase-sym-bind sym exp)
   (let1  d (and (vsymbol? sym) (env-find-data sym))
     (when (and d (env-data-ref-only? d))
-      (@! d.exp exp))))
+      (@! d.value exp))))
 
 (define-constant exp-erased (gensym))
 (define erased-flag (make-parameter #f))

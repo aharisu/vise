@@ -24,12 +24,12 @@
 (define (get-evaluated-exp e)
   (cond
     [(and (list? e) (eq? (vexp (car e)) 'quote)
-       (not (symbol? (vexp (cdar e)))))
+       (not (symbol? (vexp (cadr e)))))
      (cadr e)]
     [(vsymbol? e) 
      (let1 d (env-find-data e)
-       (if (and d (not (eq? env-data-none-exp (@ d.exp))))
-         (get-evaluated-exp (@ d.exp))
+       (if (and d (not (eq? env-data-none-value (@ d.value))))
+         (get-evaluated-exp (@ d.value))
          e))]
     [else e]))
 
@@ -79,7 +79,7 @@
 
 (define vmacro? (cut is-a? <> <vmacro>))
 
-(define-constant env-data-none-exp (gensym))
+(define-constant env-data-none-value (gensym))
 
 ;;;;;
 ;;refer data
@@ -88,6 +88,7 @@
   (
    (symbol :init-keyword :symbol)
    (exp :init-keyword :exp)
+   (value :init-value env-data-none-value) ;evaluated value
    (scope :init-keyword :scope)
    (attr :init-keyword :attr :init-value '())
    (vim-name :init-value #f)
@@ -179,7 +180,7 @@
 (define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
 
 (define (env-add-symbol env symbol scope :key (attr '()))
-  (env-add-symbol&exp env symbol scope env-data-none-exp :attr attr))
+  (env-add-symbol&exp env symbol scope #f :attr attr))
 
 (define (env-add-symbol&exp env symbol scope exp :key (attr '()))
   (let1 symbol (get-symbol symbol)
