@@ -1,3 +1,10 @@
+(define-module vgen.compiler.expand
+  (use util.match)
+  (use vgen.util)
+  (use vgen.common)
+  (export vise-phase-expand expand-expression))
+
+(select-module vgen.compiler.expand)
 
 (define (vise-phase-expand env exp-list)
   (init-phase-expand env)

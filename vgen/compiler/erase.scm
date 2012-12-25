@@ -1,3 +1,12 @@
+(define-module vgen.compiler.erase
+  (use gauche.parameter)
+
+  (use vgen.util)
+  (use vgen.common)
+  (export vise-phase-erase
+    ))
+
+(select-module vgen.compiler.erase)
 
 (define (vise-phase-erase form-list)
   (sexp-traverse

@@ -1,3 +1,11 @@
+(define-module vgen.compiler.include
+  (use srfi-1)
+  (use file.util)
+
+  (use vgen.common)
+  (export vise-phase-include))
+
+(select-module vgen.compiler.include)
 
 (define (vise-phase-include load-path exp-list)
   (define (recursion form)

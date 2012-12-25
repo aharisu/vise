@@ -1,3 +1,10 @@
+(define-module vgen.compiler.lambda-expand
+  (use vgen.util)
+  (use vgen.common)
+  (export vise-phase-lambda-expand
+    ))
+
+(select-module vgen.compiler.lambda-expand)
 
 (define (vise-phase-lambda-expand form-list)
   (sexp-traverse

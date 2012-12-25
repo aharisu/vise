@@ -1,3 +1,9 @@
+(define-module vgen.compiler.check
+  (use vgen.util)
+  (use vgen.common)
+  (export vise-phase-check))
+
+(select-module vgen.compiler.check)
 
 (define (vise-phase-check global exp-list)
   (check-env global)

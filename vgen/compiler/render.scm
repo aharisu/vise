@@ -1,3 +1,15 @@
+(define-module vgen.compiler.render
+  (use gauche.parameter)
+  (use util.match)
+
+  (use vgen.util)
+  (use vgen.common)
+  (export vise-phase-render
+    renderer-table 
+    vise-lookup-renderer-ctx 
+    ))
+
+(select-module vgen.compiler.render)
 
 (define auto-generate-exp (make-parameter '()))
 
@@ -592,7 +604,6 @@
   (when (eq? ctx 'stmt)
     (add-new-line)))
 
-(define vim-cmd-list '())
 (define-macro (define-vim-cmd op sop)
   `(begin
      (set! vim-cmd-list (cons (string->symbol ,sop) vim-cmd-list))

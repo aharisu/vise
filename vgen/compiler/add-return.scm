@@ -1,3 +1,15 @@
+(define-module vgen.compiler.add-return
+  (use gauche.parameter)
+  (use util.match)
+
+  (use vgen.util)
+  (use vgen.common)
+  (use vgen.compiler.render)
+  (export vise-phase-add-return
+    return-add? 
+    ))
+
+(select-module vgen.compiler.add-return)
 
 (define (vise-phase-add-return form-list)
   (sexp-traverse 

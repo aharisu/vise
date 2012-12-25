@@ -1,4 +1,13 @@
+(define-module vgen.compiler.self-recursion
+  (use vgen.util)
+  (use vgen.common)
 
+  (use vgen.compiler.expand) 
+  (use vgen.compiler.add-return) 
+  (export vise-phase-self-recursion
+    ))
+
+(select-module vgen.compiler.self-recursion)
 
 (define (vise-phase-self-recursion form-list)
   (sexp-traverse 
