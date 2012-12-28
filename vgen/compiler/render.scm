@@ -26,7 +26,7 @@
         . ,(lambda (form ctx loop)
              (when (vsymbol? form)
                (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
-                 (when (and d outside? (eq? (@ d.scope) 'local))
+                 (when (and d outside? (or* eq? (@ d.scope) 'local 'arg))
                    (attr-push! d 'free))))
              form))
       (,traverse-apply-function-hook
@@ -75,7 +75,7 @@
 (define (boxing? symbol)
   (let1 d (and (vsymbol? symbol) (env-find-data symbol))
     (and d 
-      (eq? (@ d.scope) 'local)
+      (or* eq? (@ d.scope) 'local 'arg)
       (has-attr? d 'free)
       (not (env-data-ref-only? d)))))
 
@@ -95,7 +95,7 @@
             (vim-function-ref sym)
             sym))
       $ (lambda (sym)
-          (if (and d outside? (eq? (@ d.scope) 'local))
+          (if (and d outside? (or* eq? (@ d.scope) 'local 'arg))
             (string-append "self['" sym "']")
             sym))
       $ vim-symbol
@@ -334,7 +334,7 @@
             (display ","))
           (loop (cdr sym))))
       (display "]"))
-    (display (vim-symbol sym)))
+    (display (vim-ref-symbol sym)))
 
   ;;binding expr
   (let1 self-rec (find-self-recursion sym init)
