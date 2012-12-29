@@ -95,9 +95,11 @@
             (vim-function-ref sym)
             sym))
       $ (lambda (sym)
-          (if (and d outside? (or* eq? (@ d.scope) 'local 'arg))
-            (string-append "self['" sym "']")
-            sym))
+          (if (has-attr? symbol 'self-recursion)
+            "self"
+            (if (and d outside? (or* eq? (@ d.scope) 'local 'arg))
+              (string-append "self['" sym "']")
+              sym)))
       $ vim-symbol
       symbol)))
 
@@ -294,23 +296,23 @@
       [else arg]))
   (find exp arg))
 
-(define (render-symbol-bind sym init :optional (for-rendering? #f))
-  (define (find-self-recursion sym init)
-    (if (and (list? init) (eq? 'lambda (vexp (car init))))
-      (begin (when (not (vsymbol? sym))
-               (vise-error "Not allow distribute binding:~a ~a" sym init))
-        (let1 self-data (env-find-data sym)
-          (find-symbol-recursion
-            (lambda (exp vars)
-              (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-                (if (and d (has-attr? d 'free) outside? (eq? self-data d))
-                  (begin
-                    (attr-push! exp 'self-recursion) 
-                    (set-cons vars exp))
-                  vars)))
-            '() init)))
-      '()))
+(define (find-self-recursion sym init)
+  (if (and (list? init) (eq? 'lambda (vexp (car init))))
+    (if (not (vsymbol? sym))
+      (vise-error "Not allow distribute binding:~a ~a" sym init)
+      (let1 self-data (env-find-data sym)
+        (find-symbol-recursion
+          (lambda (exp vars)
+            (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+              (if (and d (has-attr? d 'free) outside? (eq? self-data d))
+                (begin
+                  (attr-push! exp 'self-recursion) 
+                  (set-cons vars exp))
+                vars)))
+          '() init)))
+    '()))
 
+(define (render-symbol-bind sym init :optional (for-rendering? #f))
   ;;boxing
   (for-each
     (lambda (sym)
@@ -389,6 +391,9 @@
       ;;check distribute binding
       (when (any (.$ list? car) (cadr form))
         (vise-error "Expression context let, distribute binding not allow:~a" form))
+      (for-each
+        (lambda (vars) (find-self-recursion (car vars) (cadr vars)))
+        (cadr form))
       (add-auto-generate-exp
         func-name
         ;;constract auto generate function
