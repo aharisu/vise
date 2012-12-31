@@ -1,4 +1,6 @@
 (define-module vgen.compiler.self-recursion
+  (use srfi-1)
+
   (use vgen.util)
   (use vgen.common)
 

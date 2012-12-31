@@ -437,47 +437,54 @@
 (define vim-cmd-list '())
 
 (define (find-tail-exp action ctx exp)
-  (cond
-    [(list? exp)
-     (case (get-symbol (car exp))
-       [(defun let lambda)
-        `(,@(drop-right exp 1)
-           ,(find-tail-exp action 'stmt (last exp)))]
-       [(begin and or) 
-        `(,@(drop-right exp 1)
-           ,(find-tail-exp action 
-                           (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
-                           (last (cdr exp))))]
-       [(if)
-        (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
-          (if (null? (cdddr exp))
-            (list (car exp) (cadr exp)
-                  (find-tail-exp action cctx (caddr exp))) ;then
-            (list (car exp) (cadr exp)
-                  (find-tail-exp action cctx (caddr exp)) ;then
-                  (find-tail-exp action cctx (cadddr exp)))))] ;else
-       [(set!)
-        (list (car exp) (cadr exp)
-              (find-tail-exp action 'expr (caddr exp)))]
-       [(return) (find-tail-exp action 'stmt (cadr exp))]
-       [(while augroup autocmd) exp]
-       [(quasiquote) exp] ;;TODO
-       [(try)
-        `(,(car exp)
-           ,(find-tail-exp action ctx (cadr exp))
-           ,@(map
-               (lambda (clause)
-                 (if (< 1 (length clause))
-                   `(,@(drop-right clause 1)
-                      ,(find-tail-exp action 'stmt (last clause)))
-                   clause))
-               (cddr exp)))]
-       [else 
-         (if (or (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
-               (eq? 'raw-vimscript (get-symbol (car exp))))
-           exp
-           (action exp ctx))])]
-    [else (action exp ctx)]))
+  (define (loop first-loop ctx exp)
+    (cond
+      [(list? exp)
+       (case (get-symbol (car exp))
+         [(defun let)
+          `(,@(drop-right exp 1)
+             ,(loop #f 'stmt (last exp)))]
+         [(lambda)
+          (if first-loop
+            `(,@(drop-right exp 1)
+               ,(loop #f 'stmt (last exp)))
+            (action exp ctx))]
+         [(begin and or) 
+          `(,@(drop-right exp 1)
+             ,(loop #f
+                    (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
+                    (last (cdr exp))))]
+         [(if)
+          (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+            (if (null? (cdddr exp))
+              (list (car exp) (cadr exp)
+                    (loop #f cctx (caddr exp))) ;then
+              (list (car exp) (cadr exp)
+                    (loop #f cctx (caddr exp)) ;then
+                    (loop #f cctx (cadddr exp)))))] ;else
+         [(set!)
+          (list (car exp) (cadr exp)
+                (loop #f 'expr (caddr exp)))]
+         [(return) (loop #f 'stmt (cadr exp))]
+         [(while augroup autocmd) exp]
+         [(quasiquote) exp] ;;TODO
+         [(try)
+          `(,(car exp)
+             ,(loop #f ctx (cadr exp))
+             ,@(map
+                 (lambda (clause)
+                   (if (< 1 (length clause))
+                     `(,@(drop-right clause 1)
+                        ,(loop #f 'stmt (last clause)))
+                     clause))
+                 (cddr exp)))]
+         [else 
+           (if (or (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+                 (eq? 'raw-vimscript (get-symbol (car exp))))
+             exp
+             (action exp ctx))])]
+      [else (action exp ctx)]))
+  (loop #t ctx exp))
 
 (define-constant vim-symbol-list (include "vim-function.scm"))
 
