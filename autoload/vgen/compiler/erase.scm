@@ -1,4 +1,5 @@
 (define-module vgen.compiler.erase
+  (use srfi-1)
   (use gauche.parameter)
 
   (use vgen.util)
@@ -84,6 +85,7 @@
        [(begin and or) (erase-begin-or-and ctx parent form)]
        [(augroup) (erase-augroup ctx parent form)]
        [(list-func) (erase-list-func ctx parent form)]
+       [(array) (erase-array ctx parent form)]
        [(dict) (erase-dict ctx parent form)]
        [(try) (erase-try ctx parent form)]
        [(autocmd) (erase-autocmd ctx parent form)]
@@ -197,6 +199,12 @@
      ,@(filter-map
          (erase-filter 'stmt form)
          (cddr form))))
+
+(define (erase-array ctx parent form)
+  `(,(car form)
+     ,@(map
+         (pa$ erase-expression 'expr form)
+         (cdr form))))
 
 (define (erase-dict ctx parent form)
   `(,(car form)

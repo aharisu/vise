@@ -657,6 +657,15 @@
              " " 'prefix))
   (add-new-line))
 
+(define-vise-renderer (array form ctx) expr
+  (ensure-expr-ctx form ctx)
+  (display (string-append
+             "["
+             (string-join 
+               (map (pa$ vise-render-to-string 'expr) (cdr form))
+               ",")
+             "]")))
+
 (define-vise-renderer (dict form ctx) expr
   (ensure-expr-ctx form ctx)
   (display "{")

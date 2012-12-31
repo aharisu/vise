@@ -1,4 +1,6 @@
 (define-module vgen.compiler.check
+  (use srfi-1)
+
   (use vgen.util)
   (use vgen.common)
   (export vise-phase-check))
@@ -66,6 +68,7 @@
           (for-each
             (pa$ check-expression (- nest-quasiquote 1))
             (cdr exp)))]
+       [(array) (check-array nest-quasiquote exp)]
        [(dict) (check-dict nest-quasiquote exp)]
        [(try) (check-try nest-quasiquote exp)]
        [(autocmd) (check-autocmd nest-quasiquote exp)]
@@ -232,6 +235,11 @@
         (qq-each nest (car qq)))))
 
   (qq-check (cdr exp) nest-level))
+
+(define (check-array nest-level exp)
+  (for-each
+    (pa$ check-expression nest-level)
+    (cdr exp)))
 
 (define (check-dict nest-level exp)
   (for-each

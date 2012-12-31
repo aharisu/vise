@@ -58,6 +58,7 @@
           (cadr exp) ;keyword
           (expand-expression env 'expr exp (caddr exp))
           (expand-expression env 'expr exp (cadddr exp)))]
+       [(array) (expand-array env ctx parent exp)]
        [(dict) (expand-dict env ctx parent exp)]
        [(try) (expand-try env ctx parent exp)]
        [(autocmd) (expand-autocmd env ctx parent exp)]
@@ -420,6 +421,12 @@
             :debug-info (debug-source-info exp))
       (map (pa$ expand-expression env ctx exp)
            (cdr exp)))))
+
+(define (expand-array env ctx parent exp)
+  `(,(make <vsymbol> :exp (car exp) :env env)
+     ,@(map
+         (pa$ expand-expression env 'expr exp)
+         (cdr exp))))
 
 (define (expand-dict env ctx parent exp)
   (append
