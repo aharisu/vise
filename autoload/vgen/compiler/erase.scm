@@ -51,7 +51,8 @@
 
 (define (erase-sym-bind sym exp)
   (let1  d (and (vsymbol? sym) (env-find-data sym))
-    (when (and d (env-data-ref-only? d))
+    (when (and (not (is-function-call? exp))
+            d (env-data-ref-only? d))
       (@! d.value exp))))
 
 (define-constant exp-erased (gensym))

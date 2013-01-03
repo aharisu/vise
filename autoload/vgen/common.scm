@@ -13,6 +13,9 @@
 ;;Util Type
 ;;-------------
 
+(define (is-function-call? exp)
+  (and (list? exp) (not (eq? (car exp) 'quote))))
+
 (define (get-evaluated-exp e)
   (cond
     [(and (list? e) (eq? (vexp (car e)) 'quote)
