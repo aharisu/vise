@@ -43,17 +43,17 @@
   (cond
     [(null? (cdr form)) form]
     [(list? (cadr form))
-     (receive (expansion? exp) (lambda-expansion (cadr form) 'stmt loop)
+     (receive (expansion? exp) (lambda-expansion (cadr form) #t 'stmt loop)
        (if expansion?
          exp
          (list (car form) exp)))]
     [else (list (car form) (loop 'expr (cadr form)))]))
 
 (define (lambda-expand-apply-func form ctx loop)
-  (receive (expansion? form) (lambda-expansion form ctx loop)
+  (receive (expansion? form) (lambda-expansion form #f ctx loop)
     form))
 
-(define (lambda-expansion form ctx loop)
+(define (lambda-expansion form inside-return? ctx loop)
   (define (gen-let-clause env args init)
     (let* ([rest? (and (not (null? args))
                     (let1 last (last args)
@@ -132,5 +132,8 @@
                      :prop `((body-env . ,env) (injection-env . ,new-injection-env)))
                ,(gen-let-clause env (filter vsymbol? (cadr init)) (cdr form))
                ,@(cddr init)))))
-      (values #f (map (pa$ loop 'expr) form)))))
+      (values #f 
+              (if inside-return?
+                (loop ctx form)
+                (map (pa$ loop 'expr) form))))))
 
