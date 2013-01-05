@@ -1,5 +1,7 @@
 (define-module vgen.common
+  (use gauche.parameter)
   (use gauche.vport)
+  (use srfi-1)
   (use srfi-13)
   (use vgen.util)
   (export-all)
@@ -8,6 +10,8 @@
 (select-module vgen.common)
 
 (define-condition-type <vise-error> <error> #f)
+
+(define script-prefix (make-parameter "s:"))
 
 ;;-------------
 ;;Util Type
@@ -110,7 +114,7 @@
   (@! o.attr (remove! (pa$ equal? attr) (@ o.attr))))
 
 (define (has-attr? o attr)
-  (set-exists (@ o.attr) attr))
+  (and (slot-exists? o 'attr) (set-exists (@ o.attr) attr)))
 
 (define (get-vim-name env-data)
   (if (@ env-data.vim-name)
@@ -133,7 +137,7 @@
     [else 
       (let ((prefix (case scope
                       ((arg) #\a)
-                      ((script) #\s)
+                      ((script) (string-ref (script-prefix) 0))
                       ((global) #\g)
                       ((window) #\w)
                       ((buffer) #\b)

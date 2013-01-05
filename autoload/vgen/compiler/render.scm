@@ -105,7 +105,7 @@
 (define dict-type-symbol #f)
 (define (get-dict-type-symbol)
   (unless dict-type-symbol
-    (set! dict-type-symbol (gensym "s:dict_type_"))
+    (set! dict-type-symbol (gensym (string-append (script-prefix) "dict_type_")))
     (add-auto-generate-exp 'dict-type
                            `(defvar ,dict-type-symbol (type (dict)))))
   dict-type-symbol)
@@ -113,12 +113,14 @@
 (define sid-prefix-symbol #f)
 (define (get-sid-prefix-symbol)
   (unless sid-prefix-symbol
-    (set! sid-prefix-symbol (gensym "s:SID_PREFIX_"))
+    (set! sid-prefix-symbol (gensym (string-append (script-prefix) "SID_PREFIX_")))
     (add-auto-generate-exp 
       'sid-prefix
       `(defun ,sid-prefix-symbol () :normal
-              (return (matchstr (expand (sq-str "<sfile>"))
-                                (sq-str ,#`"<SNR>\\d\\+_\\ze,(remove-symbol-prefix sid-prefix-symbol)$"))))))
+              ,(if (string=? "s:" (script-prefix))
+                 `(return (matchstr (expand (sq-str "<sfile>"))
+                                    (sq-str ,#`"<SNR>\\d\\+_\\ze,(remove-symbol-prefix sid-prefix-symbol)$")))
+                 `(return ,(script-prefix))))))
   sid-prefix-symbol)
 
 (define-constant temp-symbol (gensym "temp_"))
@@ -182,11 +184,21 @@
 ;;
 (define-syntax define-vise-renderer
   (syntax-rules ()
-    [(_ (op form ctx) req-ctx . body)
-     (vise-register-renderer! 'op (cons 'req-ctx (lambda (form ctx) . body)))]
-    [(_ op op2); alias
-                 (vise-register-renderer! 'op (or (vise-lookup-macro 'op2)
-                                                (vise-error "unknown vise renderer:~a" 'op2)))]))
+    [(_ (op form ctx) req-ctx (:definition defs ...) body ...)
+     (vise-register-renderer! 'op (cons 'req-ctx 
+                                        (lambda (form ctx) 
+                                          defs ... 
+                                          (when (and (eq? ctx 'toplevel)
+                                                  (not (eq? 'op 'eval-expression))
+                                                  (string=? (script-prefix) "b:"))
+                                            (display "exec_statement "))
+                                          body ...
+                                          (when (and (eq? ctx 'toplevel)
+                                                  (not (eq? 'op 'eval-expression))
+                                                  (string=? (script-prefix) "b:"))
+                                            (print " endexec_statement")))))]
+    [(_ (op form ctx) req-ctx body ...)
+     (define-vise-renderer (op form ctx) req-ctx (:definition) body ...)]))
 
 ;;------------------------------------------------------------
 ;; Syntax
@@ -211,32 +223,31 @@
   (render-literal (cadr form) ctx))
 
 (define-vise-renderer (defun form ctx) stmt
-  (define (gen-args args)
-    ($ (cut string-join <> ",")
-      $ map (lambda (sym) 
-              (let* ([d (env-find-data sym)]
-                     [sym (remove-symbol-prefix (get-vim-name d))])
-                (if (has-attr? d 'rest)
-                  "..."
-                  (vise-render-identifier sym))))
-      $ filter vsymbol? 
-      args))
-  (define (render-body body)
-    (add-indent (vise-render 'stmt `(begin ,@body)))
-    (add-new-line))
-
-  (define (gen-vfn name args modify body)
-    (display "function! ")
-    (display (vim-symbol name))
-    (display "(")
-    (display (gen-args args))
-    (display ")")
-    (unless (eq? modify :normal)
-      (display modify))
-    (newline)
-    (render-body body)
-    (print "endfunction"))
-
+  (:definition
+    (define (gen-args args)
+      ($ (cut string-join <> ",")
+        $ map (lambda (sym) 
+                (let* ([d (env-find-data sym)]
+                       [sym (remove-symbol-prefix (get-vim-name d))])
+                  (if (has-attr? d 'rest)
+                    "..."
+                    (vise-render-identifier sym))))
+        $ filter vsymbol? 
+        args))
+    (define (render-body body)
+      (add-indent (vise-render 'stmt `(begin ,@body)))
+      (add-new-line))
+    (define (gen-vfn name args modify body)
+      (display "function! ")
+      (display (vim-symbol name))
+      (display "(")
+      (display (gen-args args))
+      (display ")")
+      (unless (eq? modify :normal)
+        (display modify))
+      (newline)
+      (render-body body)
+      (print "endfunction")))
   (ensure-toplevel-ctx form ctx)
   (match form
     [(_ name (args ...) modify . body) (gen-vfn name args modify body)]))
@@ -327,18 +338,19 @@
   (render-symbol-bind (cadr form) (caddr form)))
 
 (define-vise-renderer (lambda form ctx) expr
-  (define (find-free exp vars)
-    (find-symbol-recursion
-      (lambda (exp vars)
-        (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-          (if (and (not (has-attr? exp 'self-recursion)) 
-                d (has-attr? d 'free) outside?)
-            (set-cons vars exp)
-            vars)))
-      vars exp))
+  (:definition
+    (define (find-free exp vars)
+      (find-symbol-recursion
+        (lambda (exp vars)
+          (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+            (if (and (not (has-attr? exp 'self-recursion)) 
+                  d (has-attr? d 'free) outside?)
+              (set-cons vars exp)
+              vars)))
+        vars exp)))
 
   (ensure-expr-ctx form ctx)
-  (let1 func-name (symbol->string (gensym "s:display"))
+  (let1 func-name (symbol->string (gensym (string-append (script-prefix) "display")))
     (add-auto-generate-exp 
       func-name
       `(defun ,func-name ,(cadr form) :dict ,@(cddr form)))
@@ -356,13 +368,14 @@
     (display "}")))
 
 (define-vise-renderer (let form ctx) stmt
-  (define (all-ref-only? vars)
-    (every
-      (lambda (var) (env-data-ref-only? (env-find-data var)))
-      vars))
+  (:definition
+    (define (all-ref-only? vars)
+      (every
+        (lambda (var) (env-data-ref-only? (env-find-data var)))
+        vars)))
 
   (if (expr-ctx? ctx)
-    (let1 func-name (gensym "s:let_func")
+    (let1 func-name (gensym (string-append (script-prefix) "let_func"))
       ;;check distribute binding
       (when (any (.$ list? car) (cadr form))
         (vise-error "Expression context let, distribute binding not allow:~a" form))
@@ -498,14 +511,15 @@
      (print "endwhile")]))
 
 (define-vise-renderer (list-func form ctx) expr
-  (define (find-free found-action exp :optional (vars '()))
-    (find-symbol-recursion 
-      (lambda (exp vars)
-        (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-          (if (and d (has-attr? d 'free) outside?)
-            (set-cons vars (found-action exp))
-            vars)))
-      vars exp))
+  (:definition
+    (define (find-free found-action exp :optional (vars '()))
+      (find-symbol-recursion 
+        (lambda (exp vars)
+          (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+            (if (and d (has-attr? d 'free) outside?)
+              (set-cons vars (found-action exp))
+              vars)))
+        vars exp)))
 
   ;(ensure-expr-ctx form ctx)
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
@@ -522,7 +536,7 @@
                      (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
                        (env-add-symbol lambda-env sym 'arg)))
                    (cddr lambda-form))]
-           [func-name (gensym "s:list_func")])
+           [func-name (gensym (string-append (script-prefix) "list_func"))])
       (add-auto-generate-exp
         func-name
         `(defun ,func-name 
@@ -620,6 +634,7 @@
 (define-vim-cmd setlocal "setlocal")
 (define-vim-cmd source "source")
 (define-vim-cmd autocmd! "autocmd!")
+(define-vim-cmd finish "finish")
 ;;TODO
 ;(define-vim-cmd keymap "key")
 
@@ -632,6 +647,14 @@
                (pa$ vise-render-to-string 'expr)
                (cddr form))
              " " 'prefix))
+  (add-new-line))
+
+(set! vim-cmd-list (cons 'eval-expression vim-cmd-list))
+(define-vise-renderer (eval-expression form ctx) stmt
+  (ensure-toplevel-ctx form ctx)
+  (display "eval_expression ")
+  (vise-render 'expr (cadr form))
+  (display " endeval_expression")
   (add-new-line))
 
 (define-vise-renderer (array form ctx) expr
@@ -835,13 +858,14 @@
 (define-binary |!~?| "!~?")
 
 (define-vise-renderer (ref form ctx) expr
-  (define (render-index i) 
-    (display "[")
-    (let1 i (if (and (list? i) (eq? 'quote (vexp (car i))))
-              (x->string (cadr i))
-              i)
-      (vise-render 'expr i))
-    (display "]"))
+  (:definition
+    (define (render-index i) 
+      (display "[")
+      (let1 i (if (and (list? i) (eq? 'quote (vexp (car i))))
+                (x->string (cadr i))
+                i)
+        (vise-render 'expr i))
+      (display "]")))
   (ensure-expr-ctx form ctx)
   (match form
     [(_ a i1 . i2)

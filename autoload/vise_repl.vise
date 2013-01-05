@@ -1,0 +1,483 @@
+;=============================================================================
+; FILE: vise_repl.vise
+; AUTHOR:  aharisu <foo.yobina@gmail.com>
+; Last Modified: 04 Jan 2013.
+; License: MIT license;{{{
+;     Permission is hereby granted, free of charge, to any person obtaining
+;     a copy of this software and associated documentation files (the
+;     "Software"), to deal in the Software without restriction, including
+;     without limitation the rights to use, copy, modify, merge, publish,
+;     distribute, sublicense, and/or sell copies of the Software, and to
+;     permit persons to whom the Software is furnished to do so, subject to
+;     the following conditions:
+;
+;     The above copyright notice and this permission notice shall be included
+;     in all copies or substantial portions of the Software.
+;
+;     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+;     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+;     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+;     IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+;     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+;     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+;     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.;}}}
+;=============================================================================
+
+(include "common-macro.vise")
+
+(defvar vise-repl-directory (substitute (cur-source-file :fullpath :directory) "\\" "/" "g"))
+(defvar vise-repl-body-path (s+ vise-repl-directory "/repl.scm"))
+
+(defun create-context-instance (proc printer script-executor exit-callback);{{{
+  (dict
+    (proc proc)
+    (printer printer)
+    (executor script-executor)
+    (lines '())
+    (prompt-history (dict))
+    (exit-callback exit-callback)
+    (script-remain "")
+    ));}}}
+
+(defun create-vise-repl-proc ();{{{
+  (vimproc#popen3 (s+ "gosh " vise-repl-body-path)));}}}
+
+(defun create-context (printer script-executor . exit-callback);{{{
+  (create-context-instance (create-vise-repl-proc) 
+                           printer 
+                           script-executor
+                           (get-rest exit-callback 0)));}}}
+
+(defun create-context-with-buf (printer script-executor bufnr . callback);{{{
+  (let ((proc (create-vise-repl-proc))
+        (exception #f))
+    (try 
+      (begin
+        (dolist [line (getbufline bufnr 1 "$")]
+          ((ref proc'stdin'write) (s+ line "\n")))
+        (sleep '100ms))
+      [else
+        (set! exception #t)])
+    (sleep '100ms)
+    (when (or (not (ref proc'is_valid))
+            (not (ref proc'stdin'is_valid)) (ref proc'stdin'eof)
+            (not (ref proc'stdout'is_valid)) (ref proc'stdout'eof))
+      (set! exception #t))
+    (create-context-instance
+      (if exception
+        (begin
+          (echo-err (join ((ref proc'stdout'read_lines)) "\n"))
+          (create-vise-repl-proc))
+        proc)
+      printer 
+      script-executor
+      (get-rest callback 0))));}}}
+
+(defun destry-vise-context (ctx);{{{
+  ((ref ctx'proc'stdin'close))
+  ((ref ctx'proc'stdout'close))
+  (run-exit-callback ctx));}}}
+
+(defun run-exit-callback (ctx);{{{
+  (when (isnot (ref ctx'exit-callback) 0)
+    ((ref ctx'exit-callback) ctx)));}}}
+
+(defun execute-line (ctx);{{{
+  (execute-text ctx (vise-repl#get-line-text ctx (line "."))));}}}
+
+(defun vise-repl#get-line-text (ctx num-line);{{{
+  (subseq (getline num-line)
+          (length (vise-repl#get-prompt ctx num-line))));}}}
+
+(defun execute-text (ctx text);{{{
+  (if (or (not (ref ctx'proc'is_valid))
+        (not (ref ctx'proc'stdin'is_valid))
+        (ref ctx'proc'stdin'eof))
+    (run-exit-callback ctx)
+    (begin
+      (add (ref ctx'lines) text)
+      ((ref ctx'proc'stdin'write)
+       (if (!~# text "\n$")
+         (s+ text "\n")
+         text)))));}}}
+
+(defun check-output (ctx . timeout);{{{
+  (if (or (not (ref ctx'proc'is_valid))
+        (not (ref ctx'proc'stdout'is_valid))
+        (ref ctx'proc'stdout'eof))
+    (run-exit-callback ctx)
+    (let1 output? #f
+      ;;check script(error) output
+      (let (([out remain] (read-output-lines (ref ctx'proc'stderr)
+                                             (get-rest timeout 0)
+                                             (ref ctx'script-remain))))
+        (ref-set! ctx'script-remain remain)
+        (unless (empty out)
+          (set! output? #t)
+          ((ref ctx'executor) ctx out)))
+      ;;check standart output 
+      (let1 out (read-output (ref ctx'proc'stdout) (get-rest timeout 0))
+        (unless (empty out)
+          (set! output? #t)
+          ((ref ctx'printer) ctx out)))
+      output?)));}}}
+
+(defun read-output (port timeout);{{{
+  (let loop ([out ""]
+             [res ((ref port 'read) -1 timeout)])
+    (if (empty res)
+      out
+      (loop (s+ out res)
+            ((ref port 'read) -1 15)))));}}}
+
+(defun read-output-lines (port timeout remain);{{{
+  (let loop ([out ""]
+             [res (s+ remain ((ref port'read) -1 timeout))])
+    (if (empty res)
+      (let1 index (strridx out "\n")
+        (if (< index 0)
+          (array "" out)
+          (if (!= index 0)
+            (array (subseq out 0 (- index 1)) (subseq out (+ index 1)))
+            (array "" (subseq out (+ index 1))))))
+      (loop (s+ out res) ((ref port'read) 512 100)))));}}}
+
+(defun vise-repl#get-prompt (ctx line);{{{
+  (if (has_key ctx "prompt-history")
+    (get (ref ctx'prompt-history) line "")
+    ""));}}}
+
+;;
+;; ui
+
+(defvar vise-context (dict))
+(defvar updatetime-save &updatetime)
+(defvar b:lispwords "")
+
+(defun create-repl-buffer (open-cmd context-creater);{{{
+  (silent! 'execute open-cmd)
+  (enew)
+  (let ([bufnum (bufnr "%")]
+        [ctx (context-creater)])
+    (initialize-context bufnum ctx)
+    (initialize-buffer)
+    (check-output ctx 250)
+    ;since a buffer number changed, it is a resetup.
+    (unlet (ref vise-context bufnum))
+    (let1 bufnum (bufnr "%")
+      (ref-set! vise-context bufnum ctx)
+      (ref-set! ctx 'bufnr bufnum))));}}}
+
+(defun vise-repl#open-new-repl (:rest cmd);{{{
+  (if-let1 bufnum (move-to-window "filetype" "vise-repl")
+    (cursor (line "$") (col "$"))
+    (create-repl-buffer
+      (get-buffer-open-cmd (get-rest cmd g:vise-buffer-direction))
+      (pa$0 create-context insert-output script-execute exit-callback)))
+  (startinsert!));}}}
+
+(defun vise-repl#open-new-repl-with-buffer (:rest cmd);{{{
+  (let1 cur-bufnum (bufnr "%")
+    (create-repl-buffer
+      (get-buffer-open-cmd (get cmd 0 g:vise-buffer-direction))
+      (pa$0 create-context-with-buf
+            insert-output script-execute cur-bufnum exit-callback)))
+  (startinsert!));}}}
+
+(defun get-buffer-open-cmd (direc);{{{
+  (if (=~# direc "^v")
+    (s+ g:vise-buffer-width ":vs")
+    (s+ g:vise-buffer-height ":sp")));}}}
+
+(defun initialize-context (bufnum ctx);{{{
+  (ref-set! ctx 'bufnr bufnum)
+  (ref-set! ctx 'input-history-index 0)
+  (ref-set! ctx 'is-buf-closed 0)
+  (ref-set! ctx 'script-remain "")
+  (ref-set! vise-context bufnum ctx));}}}
+
+(defun vise-repl#get-context (bufnr);{{{
+  (ref vise-context bufnr));}}}
+
+(defmacro switch-to-buffer (bufnum . body);{{{
+  (let ([mark-sym (x->string (gensym "switch"))])
+    `(let1 bufnum (bufnr "%")
+       (when (!= bufnum ,bufnum)
+         (mark-back-to-window ,mark-sym)
+         (move-to-buffer ,bufnum))
+       ,@body
+       (when (!= bufnum ,bufnum)
+         (back-to-marked-window ,mark-sym)))));}}}
+
+(defun insert-output (ctx text);{{{
+  (when (empty text)
+    (return))
+  (switch-to-buffer
+    (ref ctx 'bufnr)
+    (let* ([cursor-col (col ".")]
+           [line (line ".")]
+           [cur-line-text (getline line)]
+           [text-list (split text "\n")]
+           [prompt ""])
+      (if (==# (ref text -1) "\n")
+        (add text-list cur-line-text)
+        (begin
+          (set! prompt (ref text-list -1))
+          (inc! cursor-col (len prompt))
+          (.= (ref text-list -1) cur-line-text)))
+      (dolist [text text-list]
+        (setline line text)
+        (inc! line))
+      (dec! line)
+      (unless (empty prompt)
+        (ref-set! ctx 'prompt-history line prompt))
+      (cursor line cursor-col)
+      ;for screen update ...
+      (winline)))) ;}}}
+
+(defun script-execute (ctx text);{{{
+  (when (empty text)
+    (return))
+  (switch-to-buffer
+    (ref ctx 'bufnr)
+    (let1 script (s+ (ref ctx'script-remain) text)
+      (ref-set! ctx'script-remain "")
+      (let loop ([script script])
+        (let1 index (stridx script "eval_expression")
+          (if (< index 0)
+            (exec-statement ctx script)
+            (let1 endindex (stridx script "endeval_expression")
+              (unless (zero? index)
+                (exec-statement ctx (subseq script 0 (- index 1))))
+              (if (< endindex 0)
+                ;15 mean (strlen "eval_expression")
+                (ref-set! ctx'script-remain (subseq script (+ index 15)))
+                (begin
+                  (exec-expression ctx (subseq script (+ index 15) (- endindex 1)))
+                  ;18 mean (strlen "endeval_expression")
+                  (loop (subseq script (+ endindex 18)))))))))))) ;}}}
+
+(defun exec-statement (ctx stmt);{{{
+  (let1 tmp @@
+    (let loop ([stmt stmt])
+      (let ([index (stridx stmt "exec_statement")]
+            [endindex (stridx stmt "endexec_statement")])
+        (when (and (<= 0 index) (<= 0 endindex))
+          (set! @@ (subseq stmt (+ index 14) (- endindex 1)))
+          (execute '@@)
+          (loop (subseq stmt (+ endindex 17))))))
+    (set! @@ tmp)));}}}
+
+(defun exec-expression (ctx expr);{{{
+  (when (zero? (strlen (strtrim expr)))
+    (return))
+  (insert-output ctx (s+ (string (eval expr)) "\n\n")));}}}
+
+(defun exit-callback (ctx);{{{
+  (unless (ref ctx 'is-buf-closed)
+    (execute (ref ctx 'bufnr) "wincmd q"))
+  (when (has_key vise-context (ref ctx 'bufnr))
+    (unlet (ref vise-context (ref ctx 'bufnr))))
+  (when (== 0 (len vise-context))
+    (augroup viserepl-plugin
+      (autocmd! '*)))
+  (buf-leave));}}}
+
+(defun initialize-buffer ();{{{
+  (let* ([cap "[vise REPL"]
+         [c (count-window "filetype" "vise-repl")])
+    (edit (qq= (s+ (if c (s+ cap "-" (+ c 1)) cap) "]")))
+    (setlocal 'buftype 'nofile 'noswapfile)
+    (setlocal 'bufhidden 'delete)
+    (setlocal 'nonumber)
+    (setlocal 'filetype 'vise-repl)
+    (setlocal 'syntax 'vise-repl)
+    (augroup viserepl-plugin
+      (autocmd (BufUnload) <buffer> (unload-buffer))
+      (autocmd (BufEnter) <buffer> (buf-enter))
+      (autocmd (BufLeave) <buffer> (buf-leave))
+      (autocmd (CursorHold) <buffer> (cursor-hold "n"))
+      (autocmd (CursorHoldI) <buffer> (cursor-hold "i"))
+      (autocmd (CursorMoved) <buffer> (cursor-moved 0))
+      (autocmd (CursorMovedI) <buffer> (cursor-moved 0)))
+    (buf-enter)
+    (repl-mapping#initialize)));}}}
+
+;;
+;; buffer autocmd functions
+
+(defun unload-buffer ();{{{
+  (when (has_key vise-context (bufnr "%"))
+    (let1 ctx (ref vise-context (bufnr "%"))
+      (ref-set! ctx 'is-buf-closed 1)
+      (destry-vise-context ctx))));}}}
+
+(defun cursor-hold (mode);{{{
+  (cursor-moved 0)
+  (cond
+    [(==# mode "n") (feedkeys (key-str "g\\<ESC>") "n")]
+    [(==# mode "i") (feedkeys (key-str "a\\<BS>") "n")]));}}}
+
+(defun cursor-moved (timeout);{{{
+  (dolist [ctx (values vise-context)]
+    (check-output ctx timeout)));}}}
+
+(defun buf-enter ();{{{
+  (save-updatetime)
+  (set! b:lispwords &lispwords)
+  (set! &lispwords "lambda,and,or,if,cond,defun,defvar,defmacro,let,let*,letrec,begin,dolist,while,set!,else,quote,quasiquote,unquote,unquote-splicing,when,unless,dict,array,try,autocmd,augroup,let1,rlet1,if-let1"));}}}
+
+(defun buf-leave ();{{{
+  (restore-updatetime)
+  (unless (empty b:lispwords)
+    (set! &lispwords b:lispwords)
+    (set! b:lispwords "")));}}}
+
+(defun save-updatetime ();{{{
+  (set! updatetime-save &updatetime)
+  (when (> &updatetime g:vise-updatetime)
+    (set! &updatetime g:vise-updatetime)));}}}
+
+(defun restore-updatetime ();{{{
+  (when (< &updatetime updatetime-save)
+    (set! &updatetime updatetime-save)));}}}
+
+(defun vise-repl#execute (text bufnum is-insert);{{{
+  (let1 ctx (vise-repl#get-context bufnum)
+    (when (!= (bufnr "%") bufnum)
+      (mark-back-to-window "_execute")
+      (move-to-buffer bufnum))
+    (execute-text ctx text)
+    (execute ":$ normal o")
+    (let1 l (line ".")
+      (setline l (s+ (repeat " " (lispindent l)) (getline l))))
+    (let1 output? (check-output ctx 100)
+      (ref-set! ctx 'input-history-index 0)
+      (if (!= (bufnr "%") bufnum)
+        (back-to-marked-window "_execute")
+        (startinsert!))
+      output?)));}}}
+
+(defun line-split (text-block);{{{
+  (map
+    (lambda (line) (substitute line "^[	 ]*" "" ""))
+    (split text-block "\n")));}}}
+
+(defun get-visual-block ();{{{
+  (let1 tmp @@
+    (silent 'normal 'gvy)
+    (begin0 @@
+            (set! @@ tmp))));}}}
+
+(defun vise-repl#send-text-block () :range;{{{
+  (let ([v (visualmode)]
+        [selected (get-visual-block)]
+        [text ""])
+    (if (and (==# &filetype "vise-repl") (==# v "v") (==# v "V"))
+      (let* ([bufnum (bufnr "%")]
+             [ctx (vise-repl#get-context bufnum)]
+             [line a:firstline])
+        (dolist [line-text (line-split selected)]
+          ;chomp prompt
+          (let1 prompt (vise-repl#get-prompt ctx line)
+            (when (=~# line-text (s+ "^" prompt))
+              (set! line-text (subseq line-text (len prompt)))))
+          (.= text " " line-text)
+          (inc! line)))
+      (set! text (join (line-split selected) " ")))
+    (vise-repl#send-text text)));}}}
+
+(defun vise-repl#send-text (text);{{{
+  (let ([mode (mode)]
+        [filetype &filetype])
+    (when (!=# filetype "vise-repl")
+      (mark-back-to-window "_send_text")
+      (vise-repl#open-new-repl))
+    (let1 bufnum (bufnr "%")
+      (unless (vise-repl#execute text bufnum 0)
+        (check-output (vise-repl#get-context bufnum) 1000)))
+    (when (!=# filetype "vise-repl")
+      (back-to-marked-window "_send_text"))
+    (when (==# mode "n")
+      (stopinsert))));}}}
+
+(defun calc-split-window-direction (bufnum);{{{
+  (if (< (* (winwidth bufnum) 2) (* (winheight bufnum) 5))
+    ""
+    "vertical"));}}}
+
+
+;
+;window operation
+
+(defmacro winbuf-for-each (winnum-sym bufnum-sym . body);{{{
+  `(dolist [,winnum-sym (range 0 (winnr "$"))]
+     (let1 ,bufnum-sym (winbufnr ,winnum-sym)
+       ,@body)));}}}
+
+(defun count-window (kind val) ;{{{
+  (rlet1 c 0
+    (winbuf-for-each 
+      i n
+      (cond
+        [(==# kind "filetype")
+         (when (==# (getbufvar n "&filetype") val)
+           (inc! c))]
+        [(==# kind "let")
+         (when (getbufvar n val)
+           (inc! c))])))) ;}}}
+
+(defun move-to-buffer (bufnum);{{{
+  (winbuf-for-each 
+    i n
+    (when (== bufnum n)
+      (when (!= i 0)
+        (execute i "wincmd w"))
+      (return n)))
+  #f) ;}}}
+
+(defun move-to-window (kind val);{{{
+  (winbuf-for-each 
+    i n
+    (when (cond
+            [(==# kind "filetype") (==# (getbufvar n "&filetype") val)]
+            [(==# kind "let") (getbufvar n val)]
+            [else 0])
+      (when (!= i 0)
+        (execute i "wincmd w"))
+      (return n)))
+  #f);}}}
+
+(defun find-buffer (kind val);{{{
+  (winbuf-for-each 
+    i n
+    (when (cond
+            [(==# kind "filetype") (==# (getbufvar n "&filetype") val)]
+            [(==# kind "let") (getbufvar n val)]
+            [else 0])
+      (return n)))
+  #f);}}}
+
+(defun mark-back-to-window (:rest mark) ;{{{
+  (execute (s+ "let w:" (get mark 0 "_ref_back") " = 1"))) ;}}}
+
+(defun unmark-back-to-window ();{{{
+  (unlet! w:_ref_back));}}}
+
+(defun back-to-marked-window (:rest mark);{{{
+  (let1 mark (get mark 0 "_ref_back")
+    (dolist [t (range 1 (tabpagenr "$"))]
+      (dolist [w (range 1 (winnr "$"))]
+        (when (gettabwinvar t w mark)
+          (execute "tabnext" t)
+          (execute w "wincmd w")
+          (execute (s+ "unlet! w:" mark)))))));}}}
+
+;
+;util
+
+(defun strtrim (text);{{{
+  (substitute (copy text) (sq-str "^\\s*") "" ""));}}}
+
+
+; vim: foldmethod=marker commentstring=;%s
