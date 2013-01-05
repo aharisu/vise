@@ -754,13 +754,31 @@
 
 (define-nary + "+")
 (define-nary - "-")
-(define-nary * "*")
-(define-nary / "/")
-(define-nary string-append ".")
+
+(define-macro (define-nary-no-single op sop)
+  `(define-vise-renderer (,op form ctx) expr
+     (ensure-expr-ctx form ctx)
+     (match form
+       [(_ a)
+        (vise-render-expr a)]
+       [(_ a b)
+        (vise-render-expr a)
+        (display ,#`" ,sop ")
+        (vise-render-expr b)]
+       [(_ a b . x)
+        (vise-render-expr a)
+        (display ,#`" ,sop ")
+        (vise-render-expr b)
+        (display (string-join
+                   (map (cut vise-render-expr <> #t) x)
+                   ,#`" ,sop " 'prefix))])))
+(define-nary-no-single * "*")
+(define-nary-no-single / "/")
+(define-nary-no-single string-append ".")
 
 
-(define-nary and "&&")
-(define-nary or  "||")
+(define-nary-no-single and "&&")
+(define-nary-no-single or  "||")
 
 (define-macro (define-set-nary op sop sop2)
   `(define-vise-renderer (,op form ctx) stmt
