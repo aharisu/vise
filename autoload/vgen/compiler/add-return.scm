@@ -4,9 +4,8 @@
 
   (use vgen.util)
   (use vgen.common)
-  (use vgen.compiler.render)
   (export vise-phase-add-return
-    return-add? 
+    return-add? add-return-defun
     ))
 
 (select-module vgen.compiler.add-return)
@@ -24,6 +23,9 @@
       (and (not (eq? (vexp (car exp)) 'raw-vimscript))
         (or (not (eq? (vise-lookup-renderer-ctx (car exp)) 'stmt))
           (find (pa$ eq? (vexp (car exp))) vim-symbol-list))))))
+
+(define (add-return-defun form)
+  (add-return #f form #f #f))
 
 (define (add-return lambda? form ctx loop)
   (let1 ret (let1 env (slot-ref (car form) 'env)

@@ -92,29 +92,30 @@
         [self-data (env-find-data sym)]
         [injection-env (assq-ref (slot-ref (car init) 'prop) 'injection-env)]
         [has-tail-recursion? #f])
-    (let1 exp (find-tail-exp
-                (lambda (exp ctx)
-                  (cond
-                    [(and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
-                        (vsymbol? (car exp)) (eq? self-data (env-find-data (car exp))))
-                      (@dec! self-data.ref-count)
-                      (set! has-tail-recursion? #t)
-                      (expand-expression
-                        injection-env 
-                        'stmt
-                        '()
-                        `(begin 
-                           (set! recursion #t)
-                           ,@(map 
-                               (lambda (arg bind) `(set! ,arg ,bind))
-                               args (cdr exp))))]
-                    [(return-add? exp ctx)
-                     (list 
-                       (make <vsymbol> :exp 'return :env injection-env)
-                       exp)]
-                    [else exp]))
-                'expr
-                init)
+    (let1 exp `(,@(drop-right init 1)
+                 , (find-tail-exp
+                     (lambda (exp ctx)
+                       (cond
+                         [(and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
+                            (vsymbol? (car exp)) (eq? self-data (env-find-data (car exp))))
+                          (@dec! self-data.ref-count)
+                          (set! has-tail-recursion? #t)
+                          (expand-expression
+                            injection-env 
+                            'stmt
+                            '()
+                            `(begin 
+                               (set! recursion #t)
+                               ,@(map 
+                                   (lambda (arg bind) `(set! ,arg ,bind))
+                                   args (cdr exp))))]
+                         [(return-add? exp ctx)
+                          (list 
+                            (make <vsymbol> :exp 'return :env injection-env)
+                            exp)]
+                         [else exp]))
+                     'expr
+                     (last init)))
       (if has-tail-recursion?
         (let1 new-injection-env (env-injection injection-env)
           ;;make new injection-env

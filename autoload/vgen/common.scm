@@ -440,54 +440,79 @@
 (define vim-cmd-list '())
 
 (define (find-tail-exp action ctx exp)
-  (define (loop first-loop ctx exp)
-    (cond
-      [(list? exp)
-       (case (get-symbol (car exp))
-         [(defun let)
-          `(,@(drop-right exp 1)
-             ,(loop #f 'stmt (last exp)))]
-         [(lambda)
-          (if first-loop
-            `(,@(drop-right exp 1)
-               ,(loop #f 'stmt (last exp)))
-            (action exp ctx))]
-         [(begin and or) 
-          `(,@(drop-right exp 1)
-             ,(loop #f
-                    (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
-                    (last (cdr exp))))]
-         [(if)
-          (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
-            (if (null? (cdddr exp))
-              (list (car exp) (cadr exp)
-                    (loop #f cctx (caddr exp))) ;then
-              (list (car exp) (cadr exp)
-                    (loop #f cctx (caddr exp)) ;then
-                    (loop #f cctx (cadddr exp)))))] ;else
-         [(set!)
-          (list (car exp) (cadr exp)
-                (loop #f 'expr (caddr exp)))]
-         [(return) (loop #f 'stmt (cadr exp))]
-         [(while augroup autocmd) exp]
-         [(quasiquote) exp] ;;TODO
-         [(try)
-          `(,(car exp)
-             ,(loop #f ctx (cadr exp))
-             ,@(map
-                 (lambda (clause)
-                   (if (< 1 (length clause))
-                     `(,@(drop-right clause 1)
-                        ,(loop #f 'stmt (last clause)))
-                     clause))
-                 (cddr exp)))]
-         [else 
-           (if (or (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
-                 (eq? 'raw-vimscript (get-symbol (car exp))))
-             exp
-             (action exp ctx))])]
-      [else (action exp ctx)]))
-  (loop #t ctx exp))
+  (cond
+    [(list? exp)
+     (case (get-symbol (car exp))
+       [(defun let)
+        `(,@(drop-right exp 1)
+           ,(find-tail-exp action 'stmt (last exp)))]
+       [(begin and or) 
+        `(,@(drop-right exp 1)
+           ,(find-tail-exp action
+                           (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
+                           (last (cdr exp))))]
+       [(if)
+        (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
+          (if (null? (cdddr exp))
+            (list (car exp) (cadr exp)
+                  (find-tail-exp action cctx (caddr exp))) ;then
+            (list (car exp) (cadr exp)
+                  (find-tail-exp action cctx (caddr exp)) ;then
+                  (find-tail-exp action cctx (cadddr exp)))))] ;else
+       [(set!)
+        (list (car exp) (cadr exp)
+              (find-tail-exp action 'expr (caddr exp)))]
+       [(return) (find-tail-exp action 'stmt (cadr exp))]
+       [(while augroup autocmd) exp]
+       [(quasiquote) exp] ;;TODO
+       [(try)
+        `(,(car exp)
+           ,(find-tail-exp action ctx (cadr exp))
+           ,@(map
+               (lambda (clause)
+                 (if (< 1 (length clause))
+                   `(,@(drop-right clause 1)
+                      ,(find-tail-exp action 'stmt (last clause)))
+                   clause))
+               (cddr exp)))]
+       [else 
+         (if (or (any (pa$ eq? (get-symbol (car exp))) vim-cmd-list)
+               (eq? 'raw-vimscript (get-symbol (car exp))))
+           exp
+           (action exp ctx))])]
+    [else (action exp ctx)]))
+
+(define (statement-expression? form)
+  (and (pair? form)
+    (let1 func (get-symbol (car form))
+      (case func
+        [(defun defvar return set! dolist while augroup try autocmd)
+         #t]
+        [else (any (pa$ eq? func) vim-cmd-list)]))))
+
+(define-constant renderer-table (make-hash-table 'eq?))
+
+(define (vise-register-renderer! name renderer)
+  (hash-table-put! renderer-table name renderer))
+
+(define (vise-lookup-renderer sym)
+  (if-let1 v (vise-lookup-renderer-value sym)
+    (cdr v)
+    #f))
+
+(define (vise-lookup-renderer-ctx sym)
+  (if-let1 v (vise-lookup-renderer-value sym)
+    (car v)
+    #f))
+
+(define (vise-lookup-renderer-value sym)
+  (cond 
+    [(vsymbol? sym)
+     (if-let1 d (env-find-data sym)
+       (and (eq? (@ d.scope) 'syntax) (@ d.exp))
+       #f)]
+    [(symbol? sym) (hash-table-get renderer-table sym #f)]
+    [else #f]))
 
 (define-constant vim-symbol-list (include "vim-function.scm"))
 

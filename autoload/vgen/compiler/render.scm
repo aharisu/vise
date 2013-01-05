@@ -4,9 +4,8 @@
 
   (use vgen.util)
   (use vgen.common)
+  (use vgen.compiler.add-return)
   (export vise-phase-render
-    renderer-table 
-    vise-lookup-renderer-ctx 
     ))
 
 (select-module vgen.compiler.render)
@@ -181,30 +180,6 @@
 ;;------------------------------------------------------------
 ;; Renderer
 ;;
-(define-constant renderer-table (make-hash-table 'eq?))
-
-(define (vise-register-renderer! name renderer)
-  (hash-table-put! renderer-table name renderer))
-
-(define (vise-lookup-renderer sym)
-  (if-let1 v (vise-lookup-renderer-value sym)
-    (cdr v)
-    #f))
-
-(define (vise-lookup-renderer-ctx sym)
-  (if-let1 v (vise-lookup-renderer-value sym)
-    (car v)
-    #f))
-
-(define (vise-lookup-renderer-value sym)
-  (cond 
-    [(vsymbol? sym)
-     (if-let1 d (env-find-data sym)
-       (and (eq? (@ d.scope) 'syntax) (@ d.exp))
-       #f)]
-    [(symbol? sym) (hash-table-get renderer-table sym #f)]
-    [else #f]))
-
 (define-syntax define-vise-renderer
   (syntax-rules ()
     [(_ (op form ctx) req-ctx . body)
@@ -396,32 +371,34 @@
         (cadr form))
       (add-auto-generate-exp
         func-name
-        ;;constract auto generate function
-        `(defun ,func-name 
-                ,(map 
-                   (lambda (vars)
-                     ;;chage scope local -> arg
-                     (slot-set! (env-find-data (car vars)) 'scope 'arg)
-                     (car vars))
-                   (cadr form))
-                :normal
-                ,@(if (all-ref-only? (map car (cadr form)))
-                    (cddr form)
-                    ;;surrounded by let
-                    (let* ([injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)]
-                           [new-injection-env (env-injection injection-env)])
-                      ;;make new injection-env
-                      (assq-set! (slot-ref (car form) 'prop) 'injection-env new-injection-env)
-                      `((,(make <vsymbol> :exp 'let :env injection-env)
-                          ,(map
-                             (lambda (var)
-                               (list
-                                 (rlet1 sym (make <vsymbol> :exp var :env injection-env)
-                                   (env-add-symbol injection-env sym 'local))
-                                 (make <vsymbol> :exp var :env new-injection-env)))
-                             (map (.$ vexp car) (cadr form)))
-                          ;;original body
-                          ,@(cddr form)))))))
+        (add-return-defun
+          ;;constract auto generate function
+          `(,(make <vsymbol> :exp 'defun :env (slot-ref (car form) 'env))
+             ,func-name
+                  ,(map 
+                     (lambda (vars)
+                       ;;chage scope local -> arg
+                       (slot-set! (env-find-data (car vars)) 'scope 'arg)
+                       (car vars))
+                     (cadr form))
+                  :normal
+                  ,@(if (all-ref-only? (map car (cadr form)))
+                      (cddr form)
+                      ;;surrounded by let
+                      (let* ([injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)]
+                             [new-injection-env (env-injection injection-env)])
+                        ;;make new injection-env
+                        (assq-set! (slot-ref (car form) 'prop) 'injection-env new-injection-env)
+                        `((,(make <vsymbol> :exp 'let :env injection-env)
+                            ,(map
+                               (lambda (var)
+                                 (list
+                                   (rlet1 sym (make <vsymbol> :exp var :env injection-env)
+                                     (env-add-symbol injection-env sym 'local))
+                                   (make <vsymbol> :exp var :env new-injection-env)))
+                               (map (.$ vexp car) (cadr form)))
+                            ;;original body
+                            ,@(cddr form))))))))
       ;;call auto generate function
       (vise-render 'expr `(,func-name ,@(map cadr (cadr form)))))
     ;;render stetment context let
