@@ -223,22 +223,30 @@
   )
 
 (define (constract-proc-args proc-env arg)
-  (map ;args
-    (lambda (arg)
-      (if (symbol? arg)
-        (rlet1 sym (make <vsymbol> :exp arg :env proc-env)
-          (env-add-symbol proc-env sym 'arg))
-        arg))
-    (cond
-      [(symbol? arg) (list :rest arg)]
-      [(list? arg) arg]
-      [(pair? arg)
-       (let loop ((arg arg)
-                  (ret '()))
-         (if (pair? (cdr arg))
-           (loop (cdr arg) (cons (car arg) ret))
-           (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret))))))]
-      [else (vise-error "Compiler: Illegal argument:~a" arg)])))
+  (rlet1 args (map ;args
+                (lambda (arg)
+                  (if (symbol? arg)
+                    (rlet1 sym (make <vsymbol> :exp arg :env proc-env)
+                      (env-add-symbol proc-env sym 'arg))
+                    arg))
+                (cond
+                  [(symbol? arg) (list :rest arg)]
+                  [(list? arg) arg]
+                  [(pair? arg)
+                   (let loop ((arg arg)
+                              (ret '()))
+                     (if (pair? (cdr arg))
+                       (loop (cdr arg) (cons (car arg) ret))
+                       (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret))))))]
+                  [else (vise-error "Compiler: Illegal argument:~a" arg)]))
+    (let loop ((arg-cell args))
+      (unless (null? arg-cell)
+        (when (eq? (car arg-cell) :rest)
+          (when (or (null? (cdr arg-cell)) (not (null? (cddr arg-cell))))
+            (err "Illegal :rest parameter." args))
+          (when (vsymbol? (cadr arg-cell))
+            (attr-push! (env-find-data (cadr arg-cell)) 'rest)))
+        (loop (cdr arg-cell))))))
 
 (define (get-name-scope exp name)
   (let1 name (symbol->string name)
