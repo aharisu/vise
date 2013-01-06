@@ -450,7 +450,7 @@
        [(defun let)
         `(,@(drop-right exp 1)
            ,(find-tail-exp action 'stmt (last exp)))]
-       [(begin and or) 
+       [(begin) 
         `(,@(drop-right exp 1)
            ,(find-tail-exp action
                            (if (eq? 'begin (get-symbol (car exp))) ctx 'expr)
