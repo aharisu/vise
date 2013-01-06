@@ -519,14 +519,30 @@
             (if (and d (has-attr? d 'free) outside?)
               (set-cons vars (found-action exp))
               vars)))
-        vars exp)))
+        vars exp))
+    (define (string-right str index)
+      (let1 i (- (string-length str) 1 index)
+        (if (< i 0)
+          #f
+          (string-ref str i))))
+    (define (get-func-name type)
+      (let1 type (x->string type)
+        (if (eq? (string-right type 0) #\!)
+          (substring type 0 (- (string-length type) 1))
+          type)))
+    )
 
   ;(ensure-expr-ctx form ctx)
   (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
     (display "call "))
-  (display (cadr form))
+  (display (get-func-name (cadr form)))
   (display "(")
-  (vise-render 'expr (caddr form))
+  (let1 need-copy? (not (eq? (string-right (x->string (cadr form)) 0) #\!))
+    (when need-copy?
+      (display "copy("))
+    (vise-render 'expr (caddr form))
+    (when need-copy?
+      (display ")")))
   (display ",\'")
   (if (eq? 'lambda (vexp (car (cadddr form))))
     (let* ([lambda-form (cadddr form)]

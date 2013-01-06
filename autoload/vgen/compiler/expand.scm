@@ -130,8 +130,7 @@
                   (pa$ replace-symbol (caadr proc) 'v:key))
                 (cddr proc))))
         `(list-func ,type ,l ,proc))
-      `(list-func ,type ,l (,proc v:val)))
-    )
+      `(list-func ,type ,l (,proc v:val))))
 
   ;;add global macro
   ;;cond
@@ -166,11 +165,21 @@
     env
     (map proc l)
     (expand-list-func :map proc l))
+  ;;map!
+  (register-macro
+    env
+    (map! proc l)
+    (expand-list-func :map! proc l))
   ;;filter
   (register-macro
     env
     (filter proc l)
     (expand-list-func :filter proc l))
+  ;;filter!
+  (register-macro
+    env
+    (filter! proc l)
+    (expand-list-func :filter! proc l))
   ;;for-each
   (register-macro 
     env
