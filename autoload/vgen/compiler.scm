@@ -47,24 +47,25 @@
                       (load-path '())
                       (prologue "")
                       (epilogue ""))
-  (let* ((global-env (make-global-env))
-         (exp-list ((.$
-                      vise-phase-render
-                      vise-phase-erase
-                      vise-phase-lambda-expand
-                      vise-phase-self-recursion
-                      vise-phase-add-return
-                      (pa$ vise-phase-check global-env)
-                      (pa$ vise-phase-expand global-env)
-                      (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '())))
-                      vise-phase-read)
-                    in-port)))
-    (with-output-to-port
-      out-port
-      (lambda ()
-        (display prologue)
-        (for-each print exp-list)
-        (display epilogue)))))
+  (let1 global-env (make-global-env)
+    (parameterize ([toplevel-env global-env])
+      (let1 exp-list ((.$
+                        vise-phase-render
+                        vise-phase-erase
+                        vise-phase-lambda-expand
+                        vise-phase-self-recursion
+                        vise-phase-add-return
+                        (pa$ vise-phase-check global-env)
+                        (pa$ vise-phase-expand global-env)
+                        (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '())))
+                        vise-phase-read)
+                      in-port)
+        (with-output-to-port
+          out-port
+          (lambda ()
+            (display prologue)
+            (for-each print exp-list)
+            (display epilogue)))))))
 
 (define (vise-repl in-port
                    :key (script-output-port (current-output-port))
@@ -81,7 +82,8 @@
                        (pa$ vise-phase-expand global-env)
                        vise-phase-add-repl-eval
                        (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '()))))])
-    (parameterize ([script-prefix "b:"])
+    (parameterize ([toplevel-env global-env]
+                   [script-prefix "b:"])
       (letrec ((repl (lambda ()
                        (guard (e [(<vise-error> e) 
                                   (display (@ e.message) prompt-output-port)

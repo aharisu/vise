@@ -2,7 +2,7 @@
   (use util.match)
   (use vgen.util)
   (use vgen.common)
-  (export vise-phase-expand expand-expression))
+  (export vise-phase-expand expand-expression expand-toplevel-expression))
 
 (select-module vgen.compiler.expand)
 
@@ -14,6 +14,9 @@
       (reverse! (filter identity acc))
       (loop (cdr exp-list)
             (cons (expand-expression env 'toplevel '() (car exp-list)) acc)))))
+
+(define (expand-toplevel-expression exp)
+  (expand-expression (toplevel-env) 'toplevel '() exp))
 
 (define (expand-expression env ctx parent exp)
   (cond

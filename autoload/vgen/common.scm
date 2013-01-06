@@ -80,6 +80,8 @@
 
 (define-constant env-data-none-value (gensym))
 
+(define-constant toplevel-env (make-parameter #f))
+
 ;;;;;
 ;;refer data
 ;;@slot scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
@@ -517,6 +519,10 @@
        #f)]
     [(symbol? sym) (hash-table-get renderer-table sym #f)]
     [else #f]))
+
+;;syntax name symbol -> (lambda () ... "func-name")
+;;registered in tha vgen.compiler.render module
+(define-constant syntax-function-ref-table (make-hash-table 'eq?))
 
 (define-constant vim-symbol-list (include "vim-function.scm"))
 

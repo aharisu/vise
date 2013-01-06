@@ -4,6 +4,7 @@
 
   (use vgen.util)
   (use vgen.common)
+  (use vgen.compiler.expand)
   (use vgen.compiler.add-return)
   (export vise-phase-render
     ))
@@ -18,23 +19,23 @@
       (auto-generate-exp (acons sym exp l)))))
 
 (define (vise-phase-render exp)
-  ;;mark free variable
-  (sexp-traverse
-    exp
-    `((,traverse-symbol-ref 
-        . ,(lambda (form ctx loop)
-             (when (vsymbol? form)
-               (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
-                 (when (and d outside? (or* eq? (@ d.scope) 'local 'arg))
-                   (attr-push! d 'free))))
-             form))
-      (,traverse-apply-function-hook
-        . ,(lambda (form ctx loop)
-             (when (vsymbol? (car form))
-               (attr-push! (car form) 'function-call))
-             (map (pa$ loop 'expr) form)))))
   (let loop ((exp exp)
              (acc '()))
+    ;;mark free variable
+    (sexp-traverse
+      exp
+      `((,traverse-symbol-ref 
+          . ,(lambda (form ctx loop)
+               (when (vsymbol? form)
+                 (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
+                   (when (and d outside? (or* eq? (@ d.scope) 'local 'arg))
+                     (attr-push! d 'free))))
+               form))
+        (,traverse-apply-function-hook
+          . ,(lambda (form ctx loop)
+               (when (vsymbol? (car form))
+                 (attr-push! (car form) 'function-call))
+               (map (pa$ loop 'expr) form)))))
     (parameterize ([auto-generate-exp '()])
       (let1 ret (append
                   (map 
@@ -81,6 +82,19 @@
 (define (vim-function-ref func-name)
   #`"function(,(get-sid-prefix-symbol)() . ',(remove-symbol-prefix func-name)')")
 
+(define-macro (define-syntax-function-ref op . body)
+  `(hash-table-put! syntax-function-ref-table ,op
+                    (let ([func-name #f])
+                      (lambda ()
+                        (unless func-name
+                          (set! func-name (gensym (string-append (script-prefix) (vim-symbol ,op))))
+                          (add-auto-generate-exp
+                            ,op
+                            (add-return-defun
+                              (expand-toplevel-expression
+                                `(defun ,func-name args :normal ,,@body)))))
+                        func-name))))
+
 (define (vim-ref-symbol symbol)
   (receive (d outside?) (if (vsymbol? symbol)
                           (env-find-data-with-outside-lambda? (@ symbol.env) symbol)
@@ -90,9 +104,12 @@
            (vim-unboxing sym)
            sym))
       $ (lambda (sym)
-          (if (and d (has-attr? d 'function) (not (has-attr? symbol 'function-call)))
-            (vim-function-ref sym)
-            sym))
+          (cond
+            [(and d (has-attr? d 'function) (not (has-attr? symbol 'function-call)))
+             (vim-function-ref sym)]
+            [(and d (eq? (@ d.scope) 'syntax) (not (has-attr? symbol 'function-call)))
+             (vim-function-ref ((hash-table-get syntax-function-ref-table (vexp symbol))))]
+            [else sym]))
       $ (lambda (sym)
           (if (has-attr? symbol 'self-recursion)
             "self"
@@ -651,6 +668,7 @@
 (define-vim-cmd source "source")
 (define-vim-cmd autocmd! "autocmd!")
 (define-vim-cmd finish "finish")
+(define-vim-cmd throw "throw")
 ;;TODO
 ;(define-vim-cmd keymap "key")
 
@@ -768,8 +786,24 @@
                    (map (cut vise-render-expr <> #t) x)
                    ,#`" ,sop " 'prefix))])))
 
+(define-macro (define-operation-ref op zero-argument-value)
+  `(define-syntax-function-ref 
+     ',op
+     '(let1 len (len args)
+        (cond
+          [(== len 0) ,zero-argument-value]
+          [(== len 1) (,op (ref args 0))]
+          [else 
+            (let ((acc (ref args 0)))
+              (dolist [num (subseq args 1)]
+                (set! acc (,op acc num))) 
+              acc)]))))
+
 (define-nary + "+")
+(define-operation-ref + 0)
+
 (define-nary - "-")
+(define-operation-ref - (throw "- procedure requires at least 1 argument"))
 
 (define-macro (define-nary-no-single op sop)
   `(define-vise-renderer (,op form ctx) expr
@@ -789,12 +823,17 @@
                    (map (cut vise-render-expr <> #t) x)
                    ,#`" ,sop " 'prefix))])))
 (define-nary-no-single * "*")
+(define-operation-ref * 1)
 (define-nary-no-single / "/")
+(define-operation-ref / (throw "/ procedure requires at least 1 argument"))
 (define-nary-no-single string-append ".")
+(define-operation-ref string-append "")
 
 
 (define-nary-no-single and "&&")
+(define-operation-ref and #t)
 (define-nary-no-single or  "||")
+(define-operation-ref or #f)
 
 (define-macro (define-set-nary op sop sop2)
   `(define-vise-renderer (,op form ctx) stmt
@@ -826,9 +865,19 @@
         (display ,sop) 
         (vise-render-expr a)])))
 
+(define-macro (define-one-arg-operation-ref op)
+  `(define-syntax-function-ref 
+     ',op
+     '(if (== (len args) 1) 
+        (,op (ref args 0))
+        (throw ,(string-append (x->string op) " procedure requires at 1 argument")))))
+
 (define-unary not    "!")
+(define-one-arg-operation-ref not)
 (define-unary lognot "~")
+(define-one-arg-operation-ref lognot)
 (define-unary &      "&")               ; only unary op
+(define-one-arg-operation-ref not)
 
 (define-macro (define-binary op sop)
   `(define-vise-renderer (,op form ctx) expr
@@ -841,37 +890,63 @@
         (display " ")
         (vise-render-expr b)])))
 
+(define-macro (define-two-arg-operation-ref op)
+  `(define-syntax-function-ref 
+     ',op
+     '(if (== (len args) 2) 
+        (,op (ref args 0) (ref args 1))
+        (throw ,(string-append (x->string op) " procedure requires at 2 argument")))))
+
 (define-binary %       "%")
-(define-binary <       "<")
-(define-binary <=      "<=")
-(define-binary >       ">")
-(define-binary >=      ">=")
-(define-binary ==      "==")
-(define-binary !=      "!=")
+(define-two-arg-operation-ref %)
 
-(define-binary is "is")
-(define-binary isnot "isnot")
+(define-macro (define-compare-operation-ref op)
+  `(define-syntax-function-ref 
+     ',op
+     '(if (< (len args) 2) 
+        (throw ,(string-append (x->string op) " procedure requires at least 1 argument"))
+        (let1 org (ref args 0)
+          (dolist [num (subseq args 1)]
+            (if (,op org num)
+              (set! org num)
+              (return #f)))
+          (return #t)))))
 
-(define-binary |==#| "==#")
-(define-binary |!=#| "!=#")
-(define-binary |>#| ">#")
-(define-binary |>=#| ">=#")
-(define-binary |<#| "<#")
-(define-binary |<=#| "<=#")
+(define-macro (define-compare op sop)
+  `(begin
+     (define-binary ,op ,sop)
+     (define-compare-operation-ref ,op)))
+;;TODO multi argument
+(define-compare <       "<")
+(define-compare <=      "<=")
+(define-compare >       ">")
+(define-compare >=      ">=")
+(define-compare ==      "==")
+(define-compare !=      "!=")
 
-(define-binary |==?| "==?")
-(define-binary |!=?| "!=?")
-(define-binary |>?| ">?")
-(define-binary |>=?| ">=?")
-(define-binary |<?| "<?")
-(define-binary |<=?| "<=?")
+(define-compare is "is")
+(define-compare isnot "isnot")
 
-(define-binary |=~| "=~")
-(define-binary |=~#| "=~#")
-(define-binary |=~?| "=~?")
-(define-binary |!~| "!~")
-(define-binary |!~#| "!~#")
-(define-binary |!~?| "!~?")
+(define-compare |==#| "==#")
+(define-compare |!=#| "!=#")
+(define-compare |>#| ">#")
+(define-compare |>=#| ">=#")
+(define-compare |<#| "<#")
+(define-compare |<=#| "<=#")
+
+(define-compare |==?| "==?")
+(define-compare |!=?| "!=?")
+(define-compare |>?| ">?")
+(define-compare |>=?| ">=?")
+(define-compare |<?| "<?")
+(define-compare |<=?| "<=?")
+
+(define-compare |=~| "=~")
+(define-compare |=~#| "=~#")
+(define-compare |=~?| "=~?")
+(define-compare |!~| "!~")
+(define-compare |!~#| "!~#")
+(define-compare |!~?| "!~?")
 
 (define-vise-renderer (ref form ctx) expr
   (:definition
@@ -888,6 +963,17 @@
      (vise-render 'expr a)
      (render-index i1)
      (for-each render-index i2)]))
+(define-syntax-function-ref 
+  'ref
+  '(if (< (len args) 2) 
+    (throw ,(string-append (x->string op) " procedure requires at least 1 argument"))
+    (let1 tmp1 (ref args 0)
+      (dolist [refer (subseq args 1)]
+        (let1 tmp2 (ref tmp1 refer)
+          (unlet tmp1)
+          (set! tmp1 tmp2)
+          (unlet tmp2)))
+      (return tmp1))))
 
 (define-vise-renderer (subseq form ctx) expr
   (ensure-expr-ctx form ctx)
@@ -907,6 +993,18 @@
      (display ":")
      (vise-render 'expr e)
      (display "]")]))
+(define-syntax-function-ref 
+  'subseq
+  '(let1 len (len args)
+     (cond
+       [(== len 1)
+        (subseq (ref args 0))]
+       [(== len 2)
+        (subseq (ref args 0) (ref args 1))]
+       [(== len 3)
+        (subseq (ref args 0) (ref args 1) (ref args 2))]
+       [else
+        (throw "subseq procedure requires at 1 to 3 argument")])))
 
 (define (**-str form delimiter converter)
   (match form

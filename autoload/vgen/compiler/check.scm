@@ -35,7 +35,7 @@
 (define (check-expression nest-quasiquote exp)
   (cond 
     [(vsymbol? exp)
-     (check-refer-symbol exp)]
+     (check-refer-symbol exp #f)]
     [(list? exp)
      (case (get-symbol (car exp))
        [(quote)] ;nothing
@@ -77,8 +77,13 @@
     [(pair? exp)
      (vise-error "Compiler: Syntax error:~a" exp)]))
 
-(define (check-refer-symbol vsymbol)
-  (unless (env-find-data vsymbol)
+(define (check-refer-symbol vsymbol func-apply-symbol?)
+  (if-let1 d (env-find-data vsymbol)
+    (when (and (eq? (@ d.scope) 'syntax)
+            (not func-apply-symbol?)
+            (not (hash-table-exists? syntax-function-ref-table (vexp vsymbol))))
+      (vise-error "Compiler: ~a special symbol that can not referred. ~a"
+                  vsymbol (@ vsymbol.parent)))
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
                 (string=? "@@" symbol)
@@ -278,9 +283,12 @@
     (cddr exp)))
 
 (define (check-apply nest-level exp)
+  (if (vsymbol? (car exp))
+    (check-refer-symbol (car exp) #t)
+    (check-expression nest-level (car exp)))
   (for-each
     (pa$ check-expression nest-level)
-    exp)
+    (cdr exp))
   (when (vsymbol? (car exp))
     (let1 d (env-find-data (car exp))
       (if (and d (not (or (eq? (@ d.scope) 'syntax)
