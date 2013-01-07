@@ -101,7 +101,7 @@
   (unless (vsymbol? (cadr exp))
     (vise-error "Illegal argument:~a" exp))
   (let1 modify (cadddr exp)
-    (unless (or (eq? modify :normal) (eq? modify :dict) (eq? modify :range))
+    (unless (or (eq? modify :normal) (eq? modify :dict) (eq? modify :range) (eq? modify :abort))
       (vise-error "Illegal function modifier:~a" modify)))
   (check-fun nest-quasiquote (caddr exp) (cddddr exp)))
 
