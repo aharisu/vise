@@ -412,7 +412,13 @@
              (cons (car form) '()) ;name
              (map (pa$ loop (if (or* eq? (vexp (car form)) 'and 'or) 'expr ctx)) 
                   (cdr form)))]
-          [(try) form] ;;TODO
+          [(try) 
+           `(,(car form);try
+              ,(loop 'stmt (cadr form)) ;body
+              ,@(map  ;catch - finally clause
+                  (lambda (clause)
+                    `(,(car clause) ,@(map (pa$ loop 'stmt) (cdr clause))))
+                   (cddr form)))]
           [(list-func)
            (list
              (car form) ;list
