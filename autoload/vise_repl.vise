@@ -154,43 +154,93 @@
 (defvar updatetime-save &updatetime)
 (defvar b:lispwords "")
 
-(defun create-repl-buffer (open-cmd context-creater);{{{
+(defun initialize-repl-buffer ();{{{
+  (let* ([cap "[vise REPL"]
+         [c (count-window "filetype" "vise-repl")])
+    (edit (qq= (s+ (if c (s+ cap "-" (+ c 1)) cap) "]")))
+    (setlocal 'buftype 'nofile 'noswapfile)
+    (setlocal 'bufhidden 'delete)
+    (setlocal 'nonumber)
+    (setlocal 'filetype 'vise-repl)
+    (setlocal 'syntax 'vise-repl)
+    (augroup viserepl-plugin
+      (autocmd (BufUnload) <buffer> (unload-buffer))
+      (autocmd (BufEnter) <buffer> (buf-enter))
+      (autocmd (BufLeave) <buffer> (buf-leave))
+      (autocmd (CursorHold) <buffer> (cursor-hold "n"))
+      (autocmd (CursorHoldI) <buffer> (cursor-hold "i"))
+      (autocmd (CursorMoved) <buffer> (cursor-moved 0))
+      (autocmd (CursorMovedI) <buffer> (cursor-moved 0)))
+    (buf-enter)
+    (repl-mapping#initialize)));}}}
+
+(defun initialize-script-buffer ();{{{
+  (setlocal 'buftype 'nofile 'noswapfile)
+  (setlocal 'bufhidden 'delete)
+  (setlocal 'nonumber)
+  (setlocal 'filetype 'vim)
+  (setlocal 'syntax 'vim));}}}
+
+(defun create-script-buffer (script-open-cmd);{{{
+  (if (isnot #f script-open-cmd)
+    (begin
+      (mark-back-to-window "mark")
+      (silent! 'execute script-open-cmd)
+      (enew)
+      (begin0
+        (bufnr "%")
+        (initialize-script-buffer)
+        (back-to-marked-window "mark")))
+    -1));}}}
+
+(defun create-repl-buffer (open-cmd script-open-cmd context-creater);{{{
   (silent! 'execute open-cmd)
   (enew)
-  (let ([bufnum (bufnr "%")]
-        [ctx (context-creater)])
-    (initialize-context bufnum ctx)
-    (initialize-buffer)
-    (check-output ctx 250)
-    ;since a buffer number changed, it is a resetup.
-    (unlet (ref vise-context bufnum))
-    (let1 bufnum (bufnr "%")
-      (ref-set! vise-context bufnum ctx)
-      (ref-set! ctx 'bufnr bufnum))));}}}
+  (let1 bufnum (bufnr "%")
+    (initialize-repl-buffer)
+    (let ([script-bufnr (create-script-buffer script-open-cmd)] 
+          [ctx (context-creater)])
+      (initialize-context bufnum script-bufnr ctx)
+      (check-output ctx 250)
+      ;since a buffer number changed, it is a resetup.
+      (unlet (ref vise-context bufnum))
+      (let1 bufnum (bufnr "%")
+        (ref-set! vise-context bufnum ctx)
+        (ref-set! ctx 'bufnr bufnum)))));}}}
 
-(defun vise-repl#open-new-repl (:rest cmd);{{{
+(defun vise-repl#open-new-repl (with-script-buffer :rest cmd);{{{
   (if-let1 bufnum (move-to-window "filetype" "vise-repl")
     (cursor (line "$") (col "$"))
     (create-repl-buffer
-      (get-buffer-open-cmd (get-rest cmd g:vise-buffer-direction))
+      (get-repl-buffer-open-cmd (get-rest cmd g:vise-buffer-direction))
+      (if with-script-buffer
+        (get-script-buffer-open-cmd (get-rest cmd g:vise-buffer-direction))
+        #f)
       (pa$0 create-context insert-output script-execute exit-callback)))
   (startinsert!));}}}
 
 (defun vise-repl#open-new-repl-with-buffer (:rest cmd);{{{
   (let1 cur-bufnum (bufnr "%")
     (create-repl-buffer
-      (get-buffer-open-cmd (get cmd 0 g:vise-buffer-direction))
+      (get-repl-buffer-open-cmd (get cmd 0 g:vise-buffer-direction))
+      #f
       (pa$0 create-context-with-buf
             insert-output script-execute cur-bufnum exit-callback)))
   (startinsert!));}}}
 
-(defun get-buffer-open-cmd (direc);{{{
+(defun get-repl-buffer-open-cmd (direc);{{{
   (if (=~# direc "^v")
     (s+ g:vise-buffer-width ":vs")
     (s+ g:vise-buffer-height ":sp")));}}}
 
-(defun initialize-context (bufnum ctx);{{{
+(defun get-script-buffer-open-cmd (direc);{{{
+  (if (=~# direc "^v")
+    ":sp"
+    ":vs"));}}}
+
+(defun initialize-context (bufnum script-bufnr ctx);{{{
   (ref-set! ctx 'bufnr bufnum)
+  (ref-set! ctx 'script-bufnr script-bufnr)
   (ref-set! ctx 'input-history-index 0)
   (ref-set! ctx 'is-buf-closed 0)
   (ref-set! ctx 'script-remain "")
@@ -235,6 +285,20 @@
       ;for screen update ...
       (winline)))) ;}}}
 
+(defun output-to-line (output-bufnr text);{{{
+  (when (== output-bufnr -1)
+    (return))
+  (switch-to-buffer
+    output-bufnr
+    (cursor (line "$") (col "$"))
+    (let1 line (line ".")
+      (when (or (!= 1 line) (!= (col ".") 1))
+        (execute "normal 2o")
+        (inc! line 2))
+      (dolist [text (split text "\n")]
+        (setline line text)
+        (inc! line)))));}}}
+
 (defun script-execute (ctx text);{{{
   (when (empty text)
     (return))
@@ -250,10 +314,10 @@
               (unless (zero? index)
                 (exec-statement ctx (subseq script 0 (- index 1))))
               (if (< endindex 0)
-                ;15 mean (strlen "eval_expression")
-                (ref-set! ctx'script-remain (subseq script (+ index 15)))
+                ;16 mean (strlen "eval_expression ")
+                (ref-set! ctx'script-remain (subseq script (+ index 16)))
                 (begin
-                  (exec-expression ctx (subseq script (+ index 15) (- endindex 1)))
+                  (exec-expression ctx (subseq script (+ index 16) (- endindex 1)))
                   ;18 mean (strlen "endeval_expression")
                   (loop (subseq script (+ endindex 18)))))))))))) ;}}}
 
@@ -263,7 +327,8 @@
       (let ([index (stridx stmt "exec_statement")]
             [endindex (stridx stmt "endexec_statement")])
         (when (and (<= 0 index) (<= 0 endindex))
-          (set! @@ (subseq stmt (+ index 14) (- endindex 1)))
+          (set! @@ (subseq stmt (+ index 15) (- endindex 2)))
+          (output-to-line (ref ctx'script-bufnr) @@)
           (execute '@@)
           (loop (subseq stmt (+ endindex 17))))))
     (set! @@ tmp)));}}}
@@ -271,6 +336,7 @@
 (defun exec-expression (ctx expr);{{{
   (when (zero? (strlen (strtrim expr)))
     (return))
+  (output-to-line (ref ctx'script-bufnr) expr)
   (insert-output ctx (s+ (string (eval expr)) "\n\n")));}}}
 
 (defun exit-callback (ctx);{{{
@@ -282,26 +348,6 @@
     (augroup viserepl-plugin
       (autocmd! '*)))
   (buf-leave));}}}
-
-(defun initialize-buffer ();{{{
-  (let* ([cap "[vise REPL"]
-         [c (count-window "filetype" "vise-repl")])
-    (edit (qq= (s+ (if c (s+ cap "-" (+ c 1)) cap) "]")))
-    (setlocal 'buftype 'nofile 'noswapfile)
-    (setlocal 'bufhidden 'delete)
-    (setlocal 'nonumber)
-    (setlocal 'filetype 'vise-repl)
-    (setlocal 'syntax 'vise-repl)
-    (augroup viserepl-plugin
-      (autocmd (BufUnload) <buffer> (unload-buffer))
-      (autocmd (BufEnter) <buffer> (buf-enter))
-      (autocmd (BufLeave) <buffer> (buf-leave))
-      (autocmd (CursorHold) <buffer> (cursor-hold "n"))
-      (autocmd (CursorHoldI) <buffer> (cursor-hold "i"))
-      (autocmd (CursorMoved) <buffer> (cursor-moved 0))
-      (autocmd (CursorMovedI) <buffer> (cursor-moved 0)))
-    (buf-enter)
-    (repl-mapping#initialize)));}}}
 
 ;;
 ;; buffer autocmd functions
@@ -392,7 +438,7 @@
         [filetype &filetype])
     (when (!=# filetype "vise-repl")
       (mark-back-to-window "_send_text")
-      (vise-repl#open-new-repl))
+      (vise-repl#open-new-repl #f))
     (let1 bufnum (bufnr "%")
       (unless (vise-repl#execute text bufnum 0)
         (check-output (vise-repl#get-context bufnum) 1000)))

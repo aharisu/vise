@@ -44,9 +44,11 @@ set cpo&vim
 (def-global vise-buffer-direction "h")
 
 (raw-vimscript "
-command! -nargs=0 ViseREPL :call vise_repl#open_new_repl()
-command! -nargs=0 ViseREPLH :call vise_repl#open_new_repl('h')
-command! -nargs=0 ViseREPLV :call vise_repl#open_new_repl('v')
+command! -nargs=0 ViseREPL :call vise_repl#open_new_repl(0)
+command! -nargs=0 ViseREPLH :call vise_repl#open_new_repl(0, 'h')
+command! -nargs=0 ViseREPLV :call vise_repl#open_new_repl(0, 'v')
+
+command! -nargs=0 ViseREPLOutputScript :call vise_repl#open_new_repl(1)
 
 command! -nargs=0 ViseREPLWithBuffer :call vise_repl#open_new_repl_with_buffer()
 command! -nargs=0 ViseREPLWithBufferH :call vise_repl#open_new_repl_with_buffer('h')
