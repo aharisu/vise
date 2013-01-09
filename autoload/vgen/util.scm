@@ -56,3 +56,12 @@
   (let1 len (string-length str)
     (substring str start (if (< len end) len end))))
 
+(define (filter-obj obj pred list)
+  (let loop ([l list]
+             [acc '()])
+    (if (null? l)
+      (reverse! acc)
+      (let1 ret (pred (car l))
+        (loop (cdr l)
+              (if (equal? obj ret) acc (cons ret acc)))))))
+

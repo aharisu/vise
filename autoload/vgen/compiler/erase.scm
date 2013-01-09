@@ -115,10 +115,11 @@
      ,@(filter-map (erase-filter 'stmt form) (cddr form))))
 
 (define (erase-if ctx parent form)
-  (let1 frm (filter
+  (let1 frm (filter-obj
+              exp-erased
               (lambda (e)
                 (if (eq? exp-erased e)
-                  (mark-erase #f)
+                  (mark-erase e)
                   e))
               (let1 cctx (if (eq? ctx 'expr) 'expr ctx)
                 (if (null? (cdddr form))
