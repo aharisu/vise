@@ -143,6 +143,10 @@
 (define-constant temp-symbol (gensym "temp_"))
 
 (define (render-func-call ctx form)
+  (define (is-direct-call? d form)
+    (or (and (list? (car form)) (has-attr? (caar form) 'lambda-no-free-vars))
+      (and d (has-attr? d 'lambda-no-free-vars))))
+
   (let ((params #`"(,(string-join (map (pa$ vise-render-to-string 'expr) (cdr form)) \",\"))")
         (sym (vise-render-to-string 'expr (car form)))
         (d (and (vsymbol? (car form)) (env-find-data (car form)))))
@@ -155,10 +159,12 @@
       [(or (and (list? (car form)) (eq? 'lambda (vexp (caar form))))
          (and d (has-attr? d 'lambda)))
        (when (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
-         (if (symbol? (vexp (car form)))
+         (if (or (symbol? (vexp (car form))) (is-direct-call? d form))
            (display "call ")
            (begin (display "let ") (display temp-symbol) (display " = "))))
-       (display (string-append sym ".func" params))]
+       (if (is-direct-call? d form)
+         (display (string-append sym params))
+         (display (string-append sym ".func" params)))]
       [else 
         (display
           (if (or (stmt-ctx? ctx) (toplevel-ctx? ctx))
@@ -312,8 +318,27 @@
                   (attr-push! exp 'self-recursion) 
                   (set-cons vars exp))
                 vars)))
-          '() init)))
+          '() init)
+        (if-let1 free-vars (find-free init)
+          (unless (null? free-vars)
+            (attr-push! self-data 'lambda-no-free-vars)))))
     '()))
+
+(define (find-free form :optional (found-action identity))
+  (if (eq? 'lambda (vexp (car form)))
+    (fold
+      (lambda (exp vars)
+        (find-symbol-recursion
+          (lambda (exp vars)
+            (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
+              (if (and (not (has-attr? exp 'self-recursion)) 
+                    d (has-attr? d 'free) outside?)
+                (set-cons vars exp)
+                vars)))
+          vars exp))
+      '()
+      (cddr form))
+    #f))
 
 (define (render-symbol-bind sym init :optional (for-rendering? #f))
   ;;boxing
@@ -355,34 +380,26 @@
   (render-symbol-bind (cadr form) (caddr form)))
 
 (define-vise-renderer (lambda form ctx) expr
-  (:definition
-    (define (find-free exp vars)
-      (find-symbol-recursion
-        (lambda (exp vars)
-          (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-            (if (and (not (has-attr? exp 'self-recursion)) 
-                  d (has-attr? d 'free) outside?)
-              (set-cons vars exp)
-              vars)))
-        vars exp)))
-
   (ensure-expr-ctx form ctx)
-  (let1 func-name (symbol->string (gensym (string-append (script-prefix) "display")))
+  (let ([func-name (symbol->string (gensym (string-append (script-prefix) "display")))]
+        [free-vars (find-free form)])
     (add-auto-generate-exp 
       func-name
-      `(defun ,func-name ,(cadr form) :dict ,@(cddr form)))
-    (display "{'func':")
-    (display (vim-function-ref func-name))
-    (display
-      (string-join
-        (map
-          (lambda (var) #`"',(vim-symbol var)':,(vim-symbol var)")
-          (fold 
-            find-free
-            '()
-            (cddr form)))
-        "," 'prefix))
-    (display "}")))
+      `(defun ,func-name ,(cadr form) ,(if (null? free-vars) :normal :dict) ,@(cddr form)))
+    (if (null? free-vars)
+      (begin
+        (attr-push! (car form) 'lambda-no-free-vars)
+        (display (vim-function-ref func-name)))
+      (begin
+        (display "{'func':")
+        (display (vim-function-ref func-name))
+        (display
+          (string-join
+            (map
+              (lambda (var) #`"',(vim-symbol var)':,(vim-symbol var)")
+              free-vars)
+            "," 'prefix))
+        (display "}")))))
 
 (define-vise-renderer (let form ctx) stmt
   (:definition
@@ -529,14 +546,6 @@
 
 (define-vise-renderer (list-func form ctx) expr
   (:definition
-    (define (find-free found-action exp :optional (vars '()))
-      (find-symbol-recursion 
-        (lambda (exp vars)
-          (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-            (if (and d (has-attr? d 'free) outside?)
-              (set-cons vars (found-action exp))
-              vars)))
-        vars exp))
     (define (string-right str index)
       (let1 i (- (string-length str) 1 index)
         (if (< i 0)
@@ -565,10 +574,10 @@
     (let* ([lambda-form (cadddr form)]
            [lambda-env (slot-ref (caadr lambda-form) 'env)]
            [free (find-free
+                   lambda-form
                    (lambda (exp) 
                      (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
-                       (env-add-symbol lambda-env sym 'arg)))
-                   (cddr lambda-form))]
+                       (env-add-symbol lambda-env sym 'arg))))]
            [func-name (gensym (string-append (script-prefix) "list_func"))])
       (add-auto-generate-exp
         func-name
