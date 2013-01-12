@@ -8,12 +8,18 @@
 
 (define (vise-phase-expand env exp-list)
   (init-phase-expand env)
-  (let loop ((exp-list exp-list)
-             (acc '()))
-    (if (null? exp-list)
-      (reverse! (filter identity acc))
-      (loop (cdr exp-list)
-            (cons (expand-expression env 'toplevel '() (car exp-list)) acc)))))
+  ($
+    (cut sexp-traverse <> 
+      `((defun . ,(pa$ translate-set!-arg #f)) 
+        (lambda . ,(pa$ translate-set!-arg #t))))
+    (let loop ((exp-list exp-list)
+               (acc '())) 
+      (if (null? exp-list)
+        (reverse! (filter identity acc))
+        (loop (cdr exp-list)
+              (cons 
+                (expand-expression env 'toplevel '() (car exp-list))
+                acc))))))
 
 (define (expand-toplevel-expression exp)
   (expand-expression (toplevel-env) 'toplevel '() exp))
@@ -520,4 +526,34 @@
     (if-let1 d (env-find-data sym env)
       (@inc! d.ref-count))))
 
+
+(define (translate-set!-arg lambda? form ctx loop)
+  (let1 setted (filter
+                 (lambda (arg)
+                   (and (vsymbol? arg) 
+                     (if-let1 d (env-find-data arg)
+                       (not (env-data-ref-only? d))
+                       #f)))
+                 (if lambda? (cadr form) (caddr form)))
+    (if (null? setted)
+      form
+      (let* ([injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)]
+             [new-injection-env (env-injection injection-env)])
+        (assq-set! (slot-ref (car form) 'prop) 'injection-env new-injection-env)
+        (rlet1 ret
+          `(,@(take form (if lambda? 2 4))
+             (,(make <vsymbol> :exp 'let :env injection-env)
+               ,(map
+                  (lambda (arg)
+                    (list
+                      (rlet1 sym (make <vsymbol> :exp (vexp arg) :env injection-env)
+                        (let ([arg-data (env-find-data arg)]
+                              [new-data (env-add-symbol injection-env sym 'local)])
+                          (@! new-data.ref-count (@ arg-data.ref-count))
+                          (@! new-data.set-count (@ arg-data.set-count))
+                          (@! arg-data.ref-count 1)
+                          (@! arg-data.set-count 0)))
+                      (make <vsymbol> :exp (vexp arg) :env new-injection-env)))
+                  setted)
+               ,@((if lambda? cddr cddddr) form))))))))
 

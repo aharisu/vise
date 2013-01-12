@@ -184,13 +184,14 @@
   (env-add-symbol&exp env symbol scope #f :attr attr))
 
 (define (env-add-symbol&exp env symbol scope exp :key (attr '()))
-  (let1 symbol (get-symbol symbol)
-    (@push! env.symbols 
-            (cons symbol (make <env-data>
-                               :symbol symbol
-                               :exp exp
-                               :scope scope
-                               :attr attr)))))
+  (let* ([symbol (get-symbol symbol)]
+         [data (make <env-data>
+                    :symbol symbol
+                    :exp exp
+                    :scope scope
+                    :attr attr)])
+    (@push! env.symbols (cons symbol data))
+    data))
 
 (define (env-find-data-with-outside-lambda? env symbol)
   (let1 symbol (get-symbol symbol)
