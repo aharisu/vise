@@ -148,7 +148,10 @@
                     (string-titlecase (x->string sym))
                     (x->string sym))))
         (if prefix
-          (let1 sym (x->string sym)
+          (let ([sym (x->string sym)]
+                [name (if (set-exists attr 'gensym) 
+                        (symbol->string (gensym (string-append name "_")))
+                        name)])
             (if (and (< 1 (string-length sym)) (eq? (string-ref name 1) #\:)
                   (eq? (string-ref name 0) prefix))
               name 

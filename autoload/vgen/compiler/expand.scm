@@ -1,4 +1,6 @@
 (define-module vgen.compiler.expand
+  (use srfi-11)
+
   (use util.match)
   (use vgen.util)
   (use vgen.common)
@@ -301,13 +303,16 @@
         (constract-proc-args fn-env (caddr exp))) ;args
       (parse-body injection-env (cdddr exp)))))  ;body
 
-(define (expand-symbol-bind sym init scope env)
+(define (expand-symbol-bind sym init scope env
+                            :optional attr)
   (define (to-vsymbol sym)
     (if (symbol? sym)
       (rlet1 sym (make <vsymbol> :exp sym :env env)
         (env-add-symbol env sym scope)
         (when (and (list? init) (eq? (car init) 'lambda))
-          (attr-push! (env-find-data sym env) 'lambda)))
+          (attr-push! (env-find-data sym env) 'lambda))
+        (unless (undefined? attr)
+          (attr-push! (env-find-data sym env) attr)))
       sym))
   (cond
     ((symbol? sym) (to-vsymbol sym))
@@ -381,13 +386,15 @@
 (define (expand-dolist env ctx parent exp)
   (match exp
     [(_ (var expr) . body)
-     (let1 dolist-env (make-env env)
+     (let ([dolist-env (make-env env)]
+           [scope (if (eq? ctx 'toplevel) 'script 'local)]
+           [attr (if (eq? ctx 'toplevel) 'gensym (undefined))])
        (append
          (list
            (make <vsymbol> :exp (car exp) :env env ;dolist 
                  :debug-info (debug-source-info exp))
            (list
-             (expand-symbol-bind var expr 'local dolist-env)
+             (expand-symbol-bind var expr scope dolist-env attr)
              (expand-expression env 'expr exp expr)))
          (map
            (pa$ expand-expression dolist-env 'stmt exp)
@@ -397,41 +404,44 @@
 (define (expand-let env ctx parent exp)
   (match exp
     [(_ (? list? vars) . body)
-     (receive (vars let-env)
-       (if (eq? (car exp) 'letrec)
-         (let ([let-env (make-env env)]
-               [var-loop (lambda (f)
-                           (let loop ((vars vars)
-                                      (acc '()))
-                             (if (null? vars)
-                               (reverse! acc)
-                               (loop (cdr vars) (cons (f vars) acc)))))])
-           (values
-             (map
-               list
-               (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) 'local let-env)))
-               (var-loop (lambda (var) (expand-expression let-env 'expr exp (cadar var)))))
-             let-env))
-         (let loop ((vars vars)
-                    (let-env (make-env env))
-                    (acc '()))
-           (if (null? vars)
-             (values (reverse! acc) let-env)
-             (loop (cdr vars)
-                   (if (eq? (car exp) 'let*) (make-env let-env) let-env)
-                   (cons
-                     (list
-                       (expand-symbol-bind (caar vars) (cadar vars) 'local let-env)
-                       (expand-expression (@ let-env.parent) 'expr exp (cadar vars)))
-                     acc)))))
-       (let1 injection-env (make-env let-env)
-         `(,(make <vsymbol> :exp 'let :env env ;let or let* or letrec
-                  :debug-info (debug-source-info exp)
-                  :prop `((body-env . ,let-env) (injection-env . ,injection-env)))
-            ,vars
-            ,@(map ;body
-                (pa$ expand-expression injection-env 'stmt exp)
-                (cddr exp)))))]
+     (receive (scope attr) (if (eq? ctx 'toplevel) 
+                             (values 'script 'gensym)
+                             (values 'local (undefined)))
+       (receive (vars let-env)
+         (if (eq? (car exp) 'letrec)
+           (let ([let-env (make-env env)]
+                 [var-loop (lambda (f)
+                             (let loop ((vars vars)
+                                        (acc '()))
+                               (if (null? vars)
+                                 (reverse! acc)
+                                 (loop (cdr vars) (cons (f vars) acc)))))])
+             (values
+               (map
+                 list
+                 (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) scope let-env attr)))
+                 (var-loop (lambda (var) (expand-expression let-env 'expr exp (cadar var)))))
+               let-env))
+           (let loop ((vars vars)
+                      (let-env (make-env env))
+                      (acc '()))
+             (if (null? vars)
+               (values (reverse! acc) let-env)
+               (loop (cdr vars)
+                     (if (eq? (car exp) 'let*) (make-env let-env) let-env)
+                     (cons
+                       (list
+                         (expand-symbol-bind (caar vars) (cadar vars) scope let-env attr)
+                         (expand-expression (@ let-env.parent) 'expr exp (cadar vars)))
+                       acc)))))
+         (let1 injection-env (make-env let-env)
+           `(,(make <vsymbol> :exp 'let :env env ;let or let* or letrec
+                    :debug-info (debug-source-info exp)
+                    :prop `((body-env . ,let-env) (injection-env . ,injection-env)))
+              ,vars
+              ,@(map ;body
+                  (pa$ expand-expression injection-env 'stmt exp)
+                  (cddr exp))))))]
     ;;named-let
     [(let (? symbol? name) ((var . spec) ...) . body)
      (expand-expression env ctx parent
