@@ -23,6 +23,10 @@
 
 (define (add-repl-eval form ctx loop)
   (if (and (eq? ctx 'toplevel) (not (statement-expression? form)))
-    `(eval-expression ,form)
+    (list
+      (make <vsymbol>
+            :exp 'eval-expression
+            :env (toplevel-env))
+      form)
     form))
 

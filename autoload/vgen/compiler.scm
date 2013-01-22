@@ -79,8 +79,8 @@
                        vise-phase-self-recursion
                        vise-phase-add-return
                        (pa$ vise-phase-check global-env)
-                       (pa$ vise-phase-expand global-env)
                        vise-phase-add-repl-eval
+                       (pa$ vise-phase-expand global-env)
                        (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '()))))])
     (parameterize ([toplevel-env global-env]
                    [script-prefix "b:"])
