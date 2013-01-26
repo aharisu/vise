@@ -256,8 +256,9 @@
         (vise-error "Syntax error:~a" clause))
       (unless (or (and (vsymbol? (car clause)) 
                     (or* eq? (slot-ref (car clause) 'exp) 'else 'finally))
-                (string? (car clause)))
-        (vise-error "Syntax error. Require catch string or 'finally, 'else:~a" clause))
+                (string? (car clause))
+                (regexp? (car clause)))
+        (vise-error "Syntax error. Require catch string or finally, else:~a" clause))
       (for-each
         (pa$ check-expression nest-level)
         (cdr clause)))

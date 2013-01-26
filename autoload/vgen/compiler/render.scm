@@ -238,6 +238,7 @@
            (map (pa$ vise-render-to-string 'expr) exp) 
            ",")
          "]")]
+      [(regexp? exp) (string-append "'" (regexp->string exp) "'")]
       [(string? exp) (write-to-string exp)]
       [(boolean? exp) (if exp 1 0)]
       [else exp])))
@@ -506,17 +507,22 @@
 (define-vise-renderer (try form ctx) stmt
   (ensure-stmt-or-toplevel-ctx form ctx)
   (print "try")
-  (add-indent (vise-render ctx (cadr form)))
+  (add-indent (vise-render 'stmt (cadr form)))
   (add-new-line)
   (for-each
     (lambda (clause)
-      (if (string? (car clause))
-        (begin
-          (display "catch ")
-          (vise-render 'expr (car clause)))
-        (if (eq? (vexp (car clause)) 'else)
-          (display "catch")
-          (display "finally")))
+      (let1 pat (car clause)
+        (cond
+          [(string? pat)
+           (display "catch ")
+           (display (string-append "/" (write-to-string pat display) "/"))]
+          [(regexp? pat)
+           (display "catch ")
+           (display (string-append "/" (regexp->string pat) "/"))]
+          [(eq? (vexp pat) 'else)
+           (display "catch")]
+          [else
+            (display "finally")]))
       (add-new-line)
       (add-indent
         (vise-render 'stmt `(begin ,@(cdr clause)))))

@@ -506,7 +506,7 @@
        (values 'default events pat :normal cmd)]
       [else (err)])
     (let1 pat (cond
-                [(string? pat) pat]
+                [(or (string? pat) (regexp? pat)) pat]
                 [(symbol? pat) (symbol->string pat)]
                 [else (err)])
       (list
