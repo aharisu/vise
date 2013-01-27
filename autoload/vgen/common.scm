@@ -387,7 +387,7 @@
           [(set!) 
            (list
              (car form);set!
-             (call-symbol-ref-hook ctx (cadr form)) ;name
+             (call-symbol-ref-hook 'stmt (cadr form)) ;name
              (loop 'expr (caddr form)))]
           [(let)
            (append
@@ -498,13 +498,16 @@
            (action exp ctx))])]
     [else (action exp ctx)]))
 
-(define (statement-expression? form)
+(define (statement-expression? ctx form)
   (and (pair? form)
     (let1 func (get-symbol (car form))
-      (case func
-        [(defun defvar return set! dolist while augroup try autocmd)
+      (cond
+        [(or* eq? func 'let 'begin 'if 'raw-vimscript)
+         (or* eq? ctx 'toplevel 'stmt)]
+        [(and (vsymbol? (car form)) 
+           (or* eq? (vise-lookup-renderer-ctx (car form)) 'toplevel 'stmt))
          #t]
-        [else (any (pa$ eq? func) vim-cmd-list)]))))
+        [else #f]))))
 
 (define-constant renderer-table (make-hash-table 'eq?))
 

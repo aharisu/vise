@@ -17,12 +17,14 @@
       (or . ,add-repl-eval)
       (ary . ,add-repl-eval)
       (dict . ,add-repl-eval)
+      (begin . ,add-repl-eval)
+      (raw-vimscript . ,add-repl-eval)
       (,traverse-apply-function-hook . ,add-repl-eval)
       (,traverse-symbol-ref . ,add-repl-eval)
       )))
 
 (define (add-repl-eval form ctx loop)
-  (if (and (eq? ctx 'toplevel) (not (statement-expression? form)))
+  (if (and (eq? ctx 'toplevel) (not (statement-expression? ctx form)))
     (list
       (make <vsymbol>
             :exp 'eval-expression

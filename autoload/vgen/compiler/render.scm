@@ -213,11 +213,13 @@
                                           defs ... 
                                           (when (and (eq? ctx 'toplevel)
                                                   (not (eq? 'op 'eval-expression))
+                                                  (not (eq? 'op 'begin))
                                                   (string=? (script-prefix) "b:"))
                                             (display "exec_statement "))
                                           body ...
                                           (when (and (eq? ctx 'toplevel)
                                                   (not (eq? 'op 'eval-expression))
+                                                  (not (eq? 'op 'begin))
                                                   (string=? (script-prefix) "b:"))
                                             (print " endexec_statement")))))]
     [(_ (op form ctx) req-ctx body ...)
