@@ -315,35 +315,53 @@
     (if (not (vsymbol? sym))
       (vise-error "Not allow distribute binding:~a ~a" sym init)
       (let1 self-data (env-find-data sym)
-        (find-symbol-recursion
-          (lambda (exp vars)
-            (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-              (if (and d (has-attr? d 'free) outside? (eq? self-data d))
-                (begin
-                  (attr-push! exp 'self-recursion) 
-                  (set-cons vars exp))
-                vars)))
-          '() init)
-        (if-let1 free-vars (find-free init)
-          (unless (null? free-vars)
-            (attr-push! self-data 'lambda-no-free-vars)))))
+        (slot-set! (car init) 'prop
+                   (acons 'self-data self-data (slot-ref (car init) 'prop)))
+        (if-let1 free-vars (find-free init self-data)
+          (when (null? free-vars)
+            (attr-push! self-data 'lambda-no-free-vars)))
+        (rlet1 self-rec (find-symbol-recursion
+                           (lambda (exp vars)
+                             (receive (d num-outside) (env-find-data-with-outside-lambda-count (@ exp.env) exp)
+                               (if (and (not (zero? num-outside))
+                                     d (has-attr? d 'free) 
+                                     (eq? self-data d))
+                                 (begin
+                                   (if (= 1 num-outside)
+                                     (attr-push! exp 'self-recursion))
+                                   (set-cons vars exp))
+                                 vars)))
+                           '() 
+                           init)
+          (unless (null? self-rec)
+            ;;mark self-recursion to lambda symbol
+            (attr-push! (car init) 'self-recursion))
+          self-rec)))
     '()))
 
-(define (find-free form :optional (found-action identity))
+(define (find-free&self-rec form self-data :optional (found-action identity))
   (if (eq? 'lambda (vexp (car form)))
     (fold
-      (lambda (exp vars)
+      (lambda (exp free&self-rec)
         (find-symbol-recursion
-          (lambda (exp vars)
+          (lambda (exp free&self-rec)
             (receive (d outside?) (env-find-data-with-outside-lambda? (@ exp.env) exp)
-              (if (and (not (has-attr? exp 'self-recursion)) 
-                    d (has-attr? d 'free) outside?)
-                (set-cons vars exp)
-                vars)))
-          vars exp))
-      '()
+              (if (and outside?
+                    d (has-attr? d 'free))
+                (if (eq? self-data d)
+                  (cons (car free&self-rec)
+                        (set-cons (cdr free&self-rec) exp))
+                  (cons (set-cons (car free&self-rec) exp)
+                        (cdr free&self-rec)))
+                free&self-rec)))
+          free&self-rec exp))
+      '(() ())
       (cddr form))
     #f))
+
+(define (find-free form self-data :optional (found-action identity))
+  (let1 free&self-rec (find-free&self-rec form self-data found-action)
+    (append (car free&self-rec) (cdr free&self-rec))))
 
 (define (render-symbol-bind sym init :optional (for-rendering? #f))
   ;;boxing
@@ -386,12 +404,13 @@
 
 (define-vise-renderer (lambda form ctx) expr
   (ensure-expr-ctx form ctx)
-  (let ([func-name (symbol->string (gensym (string-append (script-prefix) "display")))]
-        [free-vars (find-free form)])
+  (let* ([func-name (symbol->string (gensym (string-append (script-prefix) "display")))]
+         [free&self-rec (find-free&self-rec form (assq-ref (slot-ref (car form) 'prop) 'self-data #f))]
+         [no-free-var? (and (null? (car free&self-rec)) (null? (cdr free&self-rec)))])
     (add-auto-generate-exp 
       func-name
-      `(defun ,func-name ,(cadr form) ,(if (null? free-vars) :normal :dict) ,@(cddr form)))
-    (if (null? free-vars)
+      `(defun ,func-name ,(cadr form) ,(if no-free-var? :normal :dict) ,@(cddr form)))
+    (if no-free-var?
       (begin
         (attr-push! (car form) 'lambda-no-free-vars)
         (display (vim-function-ref func-name)))
@@ -402,7 +421,7 @@
           (string-join
             (map
               (lambda (var) #`"',(vim-symbol var)':,(vim-ref-symbol var (slot-ref (car form) 'env))")
-              free-vars)
+              (car free&self-rec))
             "," 'prefix))
         (display "}")))))
 
@@ -584,7 +603,7 @@
     (let* ([lambda-form (cadddr form)]
            [lambda-env (slot-ref (caadr lambda-form) 'env)]
            [free (find-free
-                   lambda-form
+                   lambda-form #f
                    (lambda (exp) 
                      (rlet1 sym (make <vsymbol> :exp (@ exp.exp) :env lambda-env)
                        (env-add-symbol lambda-env sym 'arg))))]
