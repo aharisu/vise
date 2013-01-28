@@ -84,7 +84,7 @@
 
 ;;;;;
 ;;refer data
-;;@slot scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
+;;@slot scope {@ 'arg 'script 'global 'cmd 'window 'buffer 'syntax}
 (define-class <env-data> ()
   (
    (symbol :init-keyword :symbol)
@@ -129,7 +129,7 @@
 
 
 ;;;;;
-;;@param scope {@ 'arg 'script 'global 'window 'buffer 'syntax}
+;;@param scope {@ 'arg 'script 'global 'cmd 'window 'buffer 'syntax}
 ;;@param attr {@ set-list}
 (define (vise-gensym sym scope attr)
   (cond
@@ -143,6 +143,7 @@
                       ((global) #\g)
                       ((window) #\w)
                       ((buffer) #\b)
+                      ((cmd) #t)
                       (else #f)))
             (name (if (set-exists attr 'func-call)
                     (string-titlecase (x->string sym))
@@ -152,8 +153,9 @@
                 [name (if (set-exists attr 'gensym) 
                         (symbol->string (gensym (string-append name "_")))
                         name)])
-            (if (and (< 1 (string-length sym)) (eq? (string-ref name 1) #\:)
-                  (eq? (string-ref name 0) prefix))
+            (if (or (and (< 1 (string-length sym)) (eq? (string-ref name 1) #\:)
+                      (eq? (string-ref name 0) prefix))
+                  (eq? prefix #t))
               name 
               (string-append (x->string prefix) ":" name)))
           (symbol->string (gensym (string-append name "_")))))]))
