@@ -95,9 +95,11 @@
                                 `(defun ,func-name args :normal ,,@body)))))
                         func-name))))
 
-(define (vim-ref-symbol symbol)
+(define (vim-ref-symbol symbol :optional env)
   (receive (d outside?) (if (vsymbol? symbol)
-                          (env-find-data-with-outside-lambda? (@ symbol.env) symbol)
+                          (env-find-data-with-outside-lambda? 
+                            (if (undefined? env) (@ symbol.env) env)
+                            symbol)
                           (values #f #f))
     ($ (lambda (sym)
          (if (boxing? symbol)
@@ -283,7 +285,7 @@
     (cond
       [(vsymbol? exp)
        (action exp arg)]
-      [(list? exp)
+      [(pair? exp)
        (case (get-symbol (car exp))
          ((quote) arg)
          ((lambda) (fold find arg (cddr exp)))
@@ -399,7 +401,7 @@
         (display
           (string-join
             (map
-              (lambda (var) #`"',(vim-symbol var)':,(vim-symbol var)")
+              (lambda (var) #`"',(vim-symbol var)':,(vim-ref-symbol var (slot-ref (car form) 'env))")
               free-vars)
             "," 'prefix))
         (display "}")))))
