@@ -7,13 +7,10 @@
 (select-module vgen.compiler.lambda-expand)
 
 (define (vise-phase-lambda-expand form-list)
-  (sexp-traverse
-    form-list
-    `((let . ,lambda-expand-let)
-      (defvar . ,lambda-expand-defvar)))
   (sexp-traverse 
     form-list
-    `((return . ,lambda-expand-return)
+    `((let . ,lambda-expand-let)
+      (return . ,lambda-expand-return)
       (,traverse-apply-function-hook . ,lambda-expand-apply-func))))
 
 (define (lambda-expand-let form ctx loop)
@@ -22,22 +19,16 @@
       (car form) ;let
       (map
         (lambda (clause) 
-          (lambda-expand-symbol-bind (car clause) (cadr clause))
-          (list (car clause) (loop 'expr (cadr clause))))
+          (let1 init (loop 'expr (cadr clause)) 
+            (lambda-expand-symbol-bind (car clause) init)
+            (list (car clause) init)))
         (cadr form)))
     (map (pa$ loop 'stmt) (cddr form))))
-
-(define (lambda-expand-defvar form ctx loop)
-  (lambda-expand-symbol-bind (cadr form) (caddr form))
-  (list
-    (car form)
-    (cadr form)
-    (loop 'expr (caddr form))))
 
 (define (lambda-expand-symbol-bind sym init)
   (when (and (vsymbol? sym) (list? init) (eq? (vexp (car init)) 'lambda))
     (let1 d (env-find-data sym)
-      (@! d.prop (cons (cons 'init-expr init) (@ d.prop))))))
+      (@! d.prop (acons 'init-expr init (@ d.prop))))))
 
 (define (lambda-expand-return form ctx loop)
   (cond
