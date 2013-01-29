@@ -355,7 +355,7 @@
                         (cdr free&self-rec)))
                 free&self-rec)))
           free&self-rec exp))
-      '(() ())
+      (cons '() '())
       (cddr form))
     #f))
 
