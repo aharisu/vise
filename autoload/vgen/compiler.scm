@@ -57,7 +57,7 @@
                         vise-phase-add-return
                         (pa$ vise-phase-check global-env)
                         (pa$ vise-phase-expand global-env)
-                        (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '())))
+                        (pa$ vise-phase-include load-path (get-file-path in-port))
                         vise-phase-read)
                       in-port)
         (with-output-to-port
