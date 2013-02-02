@@ -17,7 +17,7 @@
 (define (check-env env)
   (let1 l (filter-map
             (lambda (sym&d) 
-              (and (or* eq? (slot-ref (cdr sym&d) 'scope) 'script 'global 'window 'buffer)
+              (and (or* eq? (slot-ref (cdr sym&d) 'scope) 'script 'global 'window 'buffer 'cmd)
                 (cons (vise-gensym (car sym&d) (slot-ref (cdr sym&d) 'scope) '()) (car sym&d))))
             (@ env.symbols))
     (for-each
@@ -75,14 +75,14 @@
        [(vim-cmd) (check-vim-cmd nest-quasiquote exp)]
        [else (check-apply nest-quasiquote exp)])]
     [(pair? exp)
-     (vise-error "Compiler: Syntax error:~a" exp)]))
+     (vise-error "Syntax error:~a" exp)]))
 
 (define (check-refer-symbol vsymbol func-apply-symbol?)
   (if-let1 d (env-find-data vsymbol)
     (when (and (eq? (@ d.scope) 'syntax)
             (not func-apply-symbol?)
             (not (hash-table-exists? syntax-function-ref-table (vexp vsymbol))))
-      (vise-error "Compiler: ~a special symbol that can not referred. ~a"
+      (vise-error "~a special symbol that can not referred\n\tRelated location: ~a"
                   vsymbol (@ vsymbol.parent)))
     (let1 symbol (symbol->string (@ vsymbol.exp))
       (unless (or 
@@ -94,7 +94,7 @@
                     ;;global or window or buffer scope?
                     (or* string=? (substring symbol 0 2) "g:" "v:" "w:" "b:" "l:" "a:")))
                 (cmd-symbol? symbol));refer name space?
-        (vise-error "Compiler: ~a reference does not exist.~a" 
+        (vise-error "~a reference does not exist.\n\tRelated location:~a" 
                     vsymbol (@ vsymbol.parent))))))
 
 (define (check-defun nest-quasiquote exp)
@@ -113,12 +113,12 @@
          (cond
            ((eq? (car sym) :rest)
             (unless (and (not (null? (cdr sym))) (null? (cddr sym)))
-              (vise-error "Illegal :rest argument:~a ~a" (car sym) form)))
+              (vise-error "Illegal :rest argument:~a\n\tRelated location:~a" (car sym) form)))
            ((not (vsymbol? (car sym))) 
-            (vise-error "Illegal argument:~a ~a" (car sym) form)))
+            (vise-error "Illegal argument:~a\n\tRelated location:~a" (car sym) form)))
          (loop (cdr sym)))))
     ((not (vsymbol? sym))
-     (vise-error "Illegal argument:~a ~a" sym form))))
+     (vise-error "Illegal argument:~a\n\tRelated location:~a" sym form))))
 
 (define (check-defvar  nest-quasiquote exp)
   (check-symbol-bind (cadr exp) exp)
@@ -129,20 +129,20 @@
 
 (define (check-fun nest-quasiquote args body)
   (define (err msg related-exp)
-    (vise-error "~a:~a" msg related-exp))
+    (vise-error "~a\n\tRelated location:~a" msg related-exp))
   ;;check args
   (let loop ((arg-cell args)
              (set '()))
     (unless (null? arg-cell)
       (let1 arg (car arg-cell)
         (unless (or (vsymbol? arg) (eq? :rest arg))
-          (err "Illegal argument." args))
+          (err "Illegal argument" args))
         (when (set-exists set arg)
-          (err "Duplicate arguments." args))
+          (err "Duplicate arguments" args))
         (loop (cdr arg-cell) (set-cons set arg)))))
   ;;check body
   (when (null? body)
-    (err "Nothing function body." exp))
+    (err "Nothing function body" exp))
   (for-each
     (pa$ check-expression nest-quasiquote)
     body))
@@ -159,7 +159,7 @@
     ;(unless (vsymbol? var)
     ;  (vise-error "Illegal argument:~a" exp))
     (unless (allow-rebound? var)
-      (vise-error "It is '~a that Can not rebound: ~a" var exp))
+      (vise-error "It is '~a that Can not rebound\n\tRelated location:~a" var exp))
     (check-expression nest-quasiquote var))
   (check-expression nest-quasiquote (caddr exp)))
 
@@ -179,7 +179,7 @@
     (cadr exp))
   ;;check body
   (when (null? (cddr exp))
-    (vise-error "Nothing let body: ~a" exp))
+    (vise-error "Nothing let body\n\tRelated location:~a" exp))
   (for-each
     (pa$ check-expression nest-quasiquote)
     (cddr exp)))
@@ -244,7 +244,7 @@
   (for-each
     (lambda (item)
       (unless (vsymbol? (car item))
-        (vise-error "Illegal dictionary key:~a ~a" (car item) exp))
+        (vise-error "Illegal dictionary key:~a\n\tRelated location:~a" (car item) exp))
       (check-expression nest-level (cadr item)))
     (cdr exp)))
 
@@ -253,12 +253,12 @@
   (for-each
     (lambda (clause)
       (unless (list? clause)
-        (vise-error "Syntax error:~a" clause))
+        (vise-error "Bad syntax\n\tRelated location:~a" clause))
       (unless (or (and (vsymbol? (car clause)) 
                     (or* eq? (slot-ref (car clause) 'exp) 'else 'finally))
                 (string? (car clause))
                 (regexp? (car clause)))
-        (vise-error "Syntax error. Require catch string or finally, else:~a" clause))
+        (vise-error "Syntax error. Require catch string or finally, else\n\tRelated location:~a" clause))
       (for-each
         (pa$ check-expression nest-level)
         (cdr clause)))
@@ -266,7 +266,7 @@
 
 (define (check-autocmd nest-level exp)
   (define (err)
-    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd).\n~a" exp))
+    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd)\n\tRelated location:~a" exp))
   (unless (vsymbol? (cadr exp)) (err)) ;group
   (unless (every vsymbol? (caddr exp)) (err)) ;events 
   (unless (or* eq? (car (cddddr exp)) :nested :normal) (err)) ;:nested
@@ -274,11 +274,11 @@
 
 (define (check-vim-cmd nest-level exp)
   (when (< (length exp) 2)
-    (vise-error "Bad syntax. vim-cmd has require command :~a" exp))
+    (vise-error "Bad syntax. vim-cmd has require command\n\tRelated location:~a" exp))
   (unless (and (list? (cadr exp))
             (eq? (caadr exp) 'quote)
             (symbol? (cadadr exp)))
-    (vise-error "Bad syntax. vim-cmd has require command symbol :~a" exp))
+    (vise-error "Bad syntax. vim-cmd has require command symbol\n\tRelated location:~a" exp))
   (for-each
     (pa$ check-expression nest-level)
     (cddr exp)))

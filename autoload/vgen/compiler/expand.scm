@@ -33,12 +33,12 @@
        [(quote) exp]
        [(defmacro) ;top level
         (unless (env-toplevel? env)
-          (vise-error "Compiler: defmacro can only be defined at top level:~a" exp))
+          (vise-error "defmacro can only be defined at top level.\n\tRelated location:~a" exp))
         (eval `(register-macro ,env ,@(cdr exp)) (current-module))
         #f]
        [(defun) ;top level
         (unless (env-toplevel? env)
-          (vise-error "Compiler: defun can only be defined at top level:~a" exp))
+          (vise-error "defun can only be defined at top level.\n\tRelated location:~a" exp))
         (expand-defun env ctx parent exp)]
        [(defvar) (expand-defvar env ctx parent exp)]
        [(lambda) (expand-lambda env ctx parent exp)]
@@ -111,8 +111,8 @@
       [(_ args . body)
        (if (and (list? args) (any (pa$ = (length args)) require-args))
          #t
-         (vise-error "Compiler: Bad syntax:~a ~a" proc form))]
-      [else (vise-error "Compiler: Bad syntax:~a ~a" proc form)])
+         (vise-error #`"Wrong number of arguments (required ,(string-join (map number->string require-args) \" or \")).\n\t Related location:~a\n\t\t~a" proc form))]
+      [else (vise-error "Bad syntax\n\tRelated location:~a\n\t\t~a" proc form)])
     #f))
 
 (define (is-expand-lambda-body? proc)
@@ -195,7 +195,7 @@
   (register-macro 
     env
     (for-each proc l)
-    (if (check-lambda-for-list-fnction `(for-each ,proc ,l) proc 1 2)
+    (if (check-lambda-for-list-fnction `(for-each ,proc ,l) proc 1)
       `(dolist (,(caadr proc) ,l) ,@(cddr proc))
       `(dolist (val ,l) (,proc val))))
   ;;length
@@ -249,7 +249,7 @@
                      (if (pair? (cdr arg))
                        (loop (cdr arg) (cons (car arg) ret))
                        (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret))))))]
-                  [else (vise-error "Compiler: Illegal argument:~a" arg)]))
+                  [else (vise-error "Illegal argument:~a" arg)]))
     (let loop ((arg-cell args))
       (unless (null? arg-cell)
         (when (eq? (car arg-cell) :rest)
@@ -271,7 +271,7 @@
            [(eq? prefix #\w) 'window]
            [(eq? prefix #\b) 'buffer]
            [(eq? prefix #\l) 'local]
-           [else (vise-error "Unkown name scope:~a ~a" name exp)]))]
+           [else (vise-error "Unkown name scope:~a\n\tRelated location~a" name exp)]))]
       [else 'script])))
 
 (define (expand-defun env ctx parent exp)
@@ -287,7 +287,7 @@
                 body)))))
 
   (when (< (length exp) 4)
-    (vise-error "Compiler: Bad syntax:~a" exp))
+    (vise-error "Bad defun syntax\n\tRelated location:~a" exp))
   (let* ((fn-env (make-env env))
          (injection-env (make-env fn-env)))
     (append
@@ -330,7 +330,7 @@
 
 (define (expand-defvar env ctx parent exp)
   (unless (= (length exp) 3)
-    (vise-error "Bad syntax:~a" exp))
+    (vise-error "Bad defvar syntax\n\tRelated location:~a" exp))
   (list
     (make <vsymbol> :exp (car exp) :env env ;defvar
           :debug-info (debug-source-info exp))
@@ -339,7 +339,7 @@
 
 (define (expand-lambda env ctx parent exp)
   (when (< (length exp) 3)
-    (vise-error "Compiler: Bad syntax:~a" exp))
+    (vise-error "Bad lambda syntax\n\tRelated location:~a" exp))
   (let* ([lambda-env (make-env env #t)]
          [injection-env (make-env lambda-env)])
     (append
@@ -357,7 +357,7 @@
     (match (cdr exp)
       [(pred then)
        (when (eq? ctx 'expr)
-         (vise-error "Expression context if, else clause require:~a" exp))
+         (vise-error "Expression context if, else clause require\n\tRelated location:~a" exp))
        (list (make <vsymbol> :exp (car exp) :env env  ;if
                    :debug-info (debug-source-info exp))
              (expand-expression env 'expr exp (cadr exp)) ;pred
@@ -368,7 +368,7 @@
              (expand-expression env 'expr exp (cadr exp)) ;pred
              (expand-expression env cctx exp (caddr exp)) ;than
              (expand-expression env cctx exp (cadddr exp)))] ;else
-      [else (vise-error "Compiler: Bad if syntax:~a" exp)])))
+      [else (vise-error "Bad if syntax\n\tRelated location:~a" exp)])))
 
 (define (expand-set! env ctx parent exp)
   (match (cdr exp)
@@ -382,7 +382,7 @@
              (@inc! d.set-count)))
          (expand-expression env 'expr exp sym))
        (expand-expression env 'expr exp e))]
-    [else (vise-error "Compiler: Bad set! syntax:~a" exp)]))
+    [else (vise-error "Bad set! syntax\n\tRelated location:~a" exp)]))
 
 (define (expand-dolist env ctx parent exp)
   (match exp
@@ -400,7 +400,7 @@
          (map
            (pa$ expand-expression dolist-env 'stmt exp)
            body)))]
-    [else (vise-error "Compiler: Bad syntax:~a" exp)]))
+    [else (vise-error "Bad dolist syntax\n\tRelated location:~a" exp)]))
 
 (define (expand-let env ctx parent exp)
   (match exp
@@ -448,7 +448,7 @@
      (expand-expression env ctx parent
                         `(letrec ((,name (lambda ,var ,@body)))
                            (,name ,@(map car spec))))]
-    [_ (vise-error "Bad let syntax:~a" exp)]))
+    [_ (vise-error "Bad let syntax\n\tRelated location:~a" exp)]))
 
 (define (expand-begin env ctx parent exp)
   (if (and (eq? ctx 'expr) (< 1 (length (cdr exp))))
@@ -479,7 +479,7 @@
                sym)
              (expand-expression env 'expr exp init)))
          sym init)]
-      [_ (vise-error "dict format error")])))
+      [_ (vise-error "dict format error\n\tRelated location:~a" exp)])))
 
 (define (expand-try env ctx parent exp)
   `(,(make <vsymbol> :exp (car exp) :env env ;dolist 
@@ -494,7 +494,7 @@
 
 (define (expand-autocmd env ctx parent exp)
   (define (err)
-    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd).\n~a" exp))
+    (vise-error "Bad syntax. autocmd format (autocmd [group] (event1 event2 ...) pat [:nested] cmd)\n\tRelated location:~a" exp))
   (receive (group events pat nest cmd)
     (match exp
       [(_ (? symbol? group) (? list? events) pat (? keyword? nest) cmd)

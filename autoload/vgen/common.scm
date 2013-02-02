@@ -337,8 +337,8 @@
               (lambda (obj)
                 (if-let1 info (or (debug-source-info obj)
                                 (and (pair? obj) (is-a? (car obj) <vexp>) (slot-ref (car obj) 'debug-info)))
-                  (format "file:~a line:~a form:~a" (car info) (cadr info) obj)
-                  obj))
+                  (format "file:~a line:~a form:~a" (car info) (cadr info) (write-to-string obj))
+                  (write-to-string obj)))
               obj)
     (apply errorf <vise-error> msg obj)))
 
