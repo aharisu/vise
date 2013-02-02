@@ -303,37 +303,38 @@
         (constract-proc-args fn-env (caddr exp))) ;args
       (parse-body injection-env (cdddr exp)))))  ;body
 
-(define (expand-symbol-bind sym init scope env
+(define (expand-symbol-bind symbol init env
+                            scope-getter
                             :optional attr)
-  (define (to-vsymbol sym)
-    (if (symbol? sym)
-      (rlet1 sym (make <vsymbol> :exp sym :env env)
-        (env-add-symbol env sym scope)
+  (define (to-vsymbol symbol)
+    (if (symbol? symbol)
+      (rlet1 sym (make <vsymbol> :exp symbol :env env)
+        (env-add-symbol env sym (scope-getter symbol))
         (when (and (list? init) (eq? (car init) 'lambda))
           (attr-push! (env-find-data sym env) 'lambda))
         (unless (undefined? attr)
           (attr-push! (env-find-data sym env) attr)))
-      sym))
+      symbol))
   (cond
-    ((symbol? sym) (to-vsymbol sym))
-    ((pair? sym)
+    ((symbol? symbol) (to-vsymbol symbol))
+    ((pair? symbol)
      (map
        to-vsymbol
-       (if (list? sym)
-         sym
-         (let loop ((arg sym)
+       (if (list? symbol)
+         symbol
+         (let loop ((arg symbol)
                     (ret '()))
            (if (pair? (cdr arg))
              (loop (cdr arg) (cons (car arg) ret))
              (reverse!  (cons (cdr arg) (cons :rest (cons (car arg) ret)))))))))))
 
 (define (expand-defvar env ctx parent exp)
-  (when (< (length exp) 3)
-    (vise-error "Compiler: Bad syntax:~a" exp))
+  (unless (= (length exp) 3)
+    (vise-error "Bad syntax:~a" exp))
   (list
     (make <vsymbol> :exp (car exp) :env env ;defvar
           :debug-info (debug-source-info exp))
-    (expand-symbol-bind (cadr exp) (caddr exp) (get-name-scope exp (cadr exp)) env)
+    (expand-symbol-bind (cadr exp) (caddr exp) env (cut get-name-scope exp <>))
     (expand-expression env 'expr exp (caddr exp))))
 
 (define (expand-lambda env ctx parent exp)
@@ -394,7 +395,7 @@
            (make <vsymbol> :exp (car exp) :env env ;dolist 
                  :debug-info (debug-source-info exp))
            (list
-             (expand-symbol-bind var expr scope dolist-env attr)
+             (expand-symbol-bind var expr dolist-env (lambda (_) scope) attr)
              (expand-expression env 'expr exp expr)))
          (map
            (pa$ expand-expression dolist-env 'stmt exp)
@@ -419,7 +420,7 @@
              (values
                (map
                  list
-                 (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) scope let-env attr)))
+                 (var-loop (lambda (var) (expand-symbol-bind (caar var) (cadar var) let-env (lambda (_) scope) attr)))
                  (var-loop (lambda (var) (expand-expression let-env 'expr exp (cadar var)))))
                let-env))
            (let loop ((vars vars)
@@ -431,7 +432,7 @@
                      (if (eq? (car exp) 'let*) (make-env let-env) let-env)
                      (cons
                        (list
-                         (expand-symbol-bind (caar vars) (cadar vars) scope let-env attr)
+                         (expand-symbol-bind (caar vars) (cadar vars) let-env (lambda (_) scope) attr)
                          (expand-expression (@ let-env.parent) 'expr exp (cadar vars)))
                        acc)))))
          (let1 injection-env (make-env let-env)
