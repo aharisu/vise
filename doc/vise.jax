@@ -32,7 +32,7 @@ Syntax                |vise-syntax|
   Operators            |vise-operators|
 Tips                  |vise-tips|
 REPL                  |vise-repl| 
-  Commands            |vise-commands|
+  Commands             |vise-commands|
 Examples              |vise-examples|
 Unsupport             |vise-unsupport|
 
@@ -1003,11 +1003,17 @@ fact関数は以下の様なVimScriptに変換されます。(読みやすさを
 ==============================================================================
 REPL						*vise-repl*
 
-viseはVimScriptプラグインとして動作するREPLを標準で持っています。最初の
-|vise-install|の項でも書いたように、REPLの動作にはGaucheとVimプラグインである
+viseはVimScriptプラグインとして動作するREPLを標準で持っています。
+最初の|vise-install|の項でも書いたように、REPLの動作にはGaucheとVimプラグインである
 vimprocが必要です。
-REPLでは特別にトップレベルにも式文脈の式の記述ができるようになっています。
+また、viseREPL自体viseスクリプトとして書かれているのでVimScriptに変換するために
+makeを実行する必要があります。Makefileはルートディレクトリにあるので、ルートディ
+レクトリで一度makeコマンドを実行してください。
+
+REPLでは通常の文脈制限とは異なり、特別にトップレベルにも式文脈の式の記述ができる
+ようになっています。
 トップレベルに式を記述した場合、式を実行した結果が出力されます。
+
 
 ------------------------------------------------------------------------------
 COMMANDS					*vise-repl-commands*
