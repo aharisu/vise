@@ -17,7 +17,7 @@
       (let ([in-port (open-input-file (x->string (car args)))]
             [out-port (if out (open-output-file out) (standard-output-port))])
         (guard (e [(<vise-error> e)
-                   (display "vise error: " (standard-error-port))
+                   (display "*** vise ERROR: " (standard-error-port))
                    (display (slot-ref e 'message) (standard-error-port))
                    (newline (standard-error-port))
                    1])
@@ -27,6 +27,7 @@
                           :prologue "\" Generated automatically DO NOT EDIT\n\n")
             (begin
               (close-input-port in-port)
-              (close-output-port out-port)))
+              (unless (eq? out-port (standard-output-port))
+                (close-output-port out-port))))
           0)))))
 
