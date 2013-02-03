@@ -1,0 +1,1052 @@
+*vise.txt*	Has LISP-like syntax and Translates to VimScript
+
+Version: 7.2
+Author : aharisu <foo.yobina@gmail.com>
+License: MIT license  {{{
+    Permission is hereby granted, free of charge, to any person obtaining
+    a copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+}}}
+
+CONTENTS					*vise-contents*
+
+Introduction          |vise-introduction|
+Install               |vise-install|
+Syntax                |vise-syntax|
+  Types                |vise-types|
+  Functions            |vise-functions|
+  Operators            |vise-operators|
+Tips                  |vise-tips|
+REPL                  |vise-repl| 
+  Commands            |vise-commands|
+Examples              |vise-examples|
+Unsupport             |vise-unsupport|
+
+
+==============================================================================
+INTRODUCTION					*vise-introduction*
+
+|vise|はLISPの様な構文を持ちVimScriptへ変換可能なプログラミング言語です。
+ラムダやマクロを備え変数参照のチェックや不要なifの削除など、いくつかの独自機能
+を持っています。
+|vise|はSchemeのR5RS実装であるGaucheで実装されています。
+
+
+==============================================================================
+INSTALL						*vise-install*  
+
+viseはGaucheで実装されているため、あらかじめGaucheのインストールが必要になりま
+す。
+
+http://practical-scheme.net/gauche/index-j.html
+
+サイトから0.9.3以上のバージョンのGaucheを選んでインストールしてください。
+
+また付属している|vise-repl|は外部プロセスと通信するためにVimプラグインの
+|vimproc|を使用しています。
+|vise-repl|を実行するときは|vimproc|もあらかじめインストールしてください。
+
+
+コンパイル方法					*vise-compile*
+---------------
+
+viseからVimScriptにコンパイルするには、genvise.scmスクリプトを使用します。
+genvise.scmはautoloadディレクトリにありGaucheで書かれています。この
+genvise.scmをコマンドラインから使用してもいいのですが、直接Vim上から実行でき
+たほうがより便利でしょう。
+以下のVimScriptを.vimrcなどに記述することで編集中のviseをVim上からコンパイル
+できます。
+>
+ "※注)このパスは実際にgenvise.scmが存在するフルパスを記述してください。
+ let s:genvise_path = '... /autoload/genvise.scm'
+
+ function! s:genvise()
+   echo "generating VimScript ..."
+ 
+   let srcfile = expand('%:p')
+   let outfile = expand('%:p:r') . '.vim'
+   let ret =  system('gosh ' . s:genvise_path . ' -o ' . outfile . ' ' . srcfile)
+   if v:shell_error
+     echohl Error
+     for line in split(ret, '\n')
+       echomsg substitute(line, '\t', '  ', 'g')
+     endfor
+     echohl None
+   else
+     echo "finish."
+   endif
+ endfunction
+
+ command! -nargs=0 Genvise :call s:genvise()
+<
+これによって現在のバッファが編集しているファイルをVimScriptにコンパイルする
+:Genviseコマンドが使用できるようになります。
+また、Vimプラグインのquickrunがインストールしてある場合、以下の定義を追加すれ
+ばquickrun上でviseのコンパイルが行えるようになります。
+>
+ let g:quickrun_config = {
+ \  'vise' : {
+ \    'command': 'gosh',
+ \    'exec': '%c ' . s:genvise_path . ' %s',
+ \    'outputter/buffer/filetype': 'vim',
+ \  },
+ \}
+<
+
+
+==============================================================================
+SYNTAX						*vise-syntax*
+
+この解説ではVimScriptとLISPの記述は理解していること前提にviseの説明を行います。
+VimScriptに関する詳細は:help usr_41を参照してください。
+
+viseはLISPの様なシンタックスでVimScriptを記述することができます。
+たとえば以下の様な記述が可能になります。
+>
+ (defun square (num) (* num num))
+ (echo (square 10))
+<
+このviseスクリプトをVimScriptに変換すると次のようになります。
+>
+ function! s:square(num)
+   return a:num * a:num
+ endfunction
+ echo s:square(10)
+<
+シンプルな例題を用いたのでVimScriptへの変換も想像通りのものになっていると思い
+ます。
+しかし、この例題からもviseの特徴をいくつか見つけることができます。
+* 引数変数を参照する時などのスコープ指定の省略
+* return文の省略
+このようにviseでは、VimScriptに必要だがいちいち記述するのが面倒なことを変換時
+に自動で行ってくれる機能をたくさん持っています。
+
+さて、このようにVimScript上の厄介ごとの面倒を見てくれるviseですが、プログラム
+を書く際に気をつけないといけない独自の制限があります。
+
+
+文脈						*vise-context*
+-----
+
+通常LISPは全てを式で表現します。
+最初の例題だと(defun ...)も(* a a)も(echo ...)も全て式です。
+しかし、変換後のVimScriptではプログラムはfunction!、return、echoなどのVimコマ
+ンドと、a:a * a:a、s:square(10)などの式という二種類に分けられます。
+そしてVimScriptの実行には必ずコマンドを指定する必要があります。
+この制約からviseには式(expression)と文(statement)とトップレベル(toplevel)とい
+う三種類の文脈(context)が存在し、全ての関数は式・文・トップレベルの三種類に分
+類することができます。
+
+NOTE:|if|や|bigin|のように式にも文にもなれる特別な関数も存在します。
+
+式と文の文脈はVimScriptに変換するために必要な文脈です。一方トップレベルの文脈
+はviseの実装に必要であったため導入しました。
+トップレベル文脈を持つ関数はマクロを定義する|defmacro|と関数を定義する|defun|
+の二つだけです。
+この二つの関数はほかのどの関数の入れ子にもすることができません。
+つまり下記の様な定義は構文エラーになります。
+>
+ (defun outer ()
+   (defun inner ()  ;ERROR 文文脈にトップレベル関数は書けません
+     "inner"))
+   (inner))
+<
+NOTE:VimScriptでは関数内関数が可能ですがviseでは対応していません。
+
+式・文・トップレベルの文脈を持つ関数は対応する文脈でしか使用できません。
+>
+ (defun func ()
+   (return "expression"))	;OK
+ "toplevel"			;ERROR トップレベル文脈に式は書けません。
+<
+文の関数は文・トップレベルのどちらでも使用できます。
+Vimコマンドは全て文の関数になっているので 文・トップレベルのどちらでも使用で
+きます。
+>
+ (defun func ()
+   (echo "statement"))		;OK
+ (echo "toplevel")		;OK
+ (func)				;OK
+<
+NOTE:関数呼び出しは式にも文にもなることができます。
+
+
+シンボル					*vise-symbol*
+---------
+
+viseではLISPと同じように関数や変数の名前に?や-といった記号文字が使用できます。
+これらの文字がVimScriptに変換されるとき、ルールに従ってVimScriptで使用可能な
+文字に置き換えられます。たとえば、
+>
+ (defun zero? (num)
+   (== 0 num))
+<
+というzero?という関数を定義した場合、VimScriptでは
+>
+ function! s:zeroP (num)
+   return 0 == a:num
+ endfunction
+<
+といったように?の部分が大文字のPに置き換えられています。この変換はviseの全て
+のシンボルに統一的に適用されるためvise中だけでシンボルを参照する際にはまった
+く気にする必要はありません。
+しかし、関数や変数のスコープがグローバルの場合は外のVimScriptからも参照できる
+必要があるため、あまり特殊な記号を使わないようにするのが無難でしょう。
+
+
+------------------------------------------------------------------------------
+TYPES						*vise-types*
+
+関数の詳細解説を行う前に、まずは基本となる型の記述方法を説明します。
+
+
+数値						*vise-number*
+-----
+数値はGaucheが扱える記法がそのまま使用できます。整数・小数点数のどちらとも
+VimScriptでも扱える記法のほとんどがそのまま使用できると思います。
+>
+ 123
+ 1.23
+ ;指数表記も可能です
+ 1e23
+<
+
+ブーリアン					*vise-boolean*
+-----------
+viseでは#t/#fが使用できます。しかしVimScriptでtrue/falseは単なる0以外/0の数値
+のため、viseからVimScriptへの変換時に#tは数値の1に#fは数値の0に変換されます。
+
+
+文字列						*vise-string*
+-------
+viseでは"(ダブルクオート)で囲んだものが文字列になるため、VimScriptと同じ記法が
+可能です。
+VimScriptには'(シングルクオート)で囲む文字列もリテラルも存在します。viseでシ
+ングルクオート文字列に変換させるには
+>
+ #/single quote string/
+ ;VimScriptへの変換後
+ 'single quote string'
+<
+のように文字列を記述します。この記法はGaucheでは正規表現リテラルを記述するた
+めのものですが、viseではこれをシングルクオート文字列として変換します。
+
+
+配列						*vise-array*
+-----
+配列は二通りの記述方法があります。
+>
+ '(1 2 (+ 3 4))		;1
+ (array 1 2 (+ 3 4))	;2
+ ;VimScriptへの変換後
+ [1, 2, 3 + 4]
+<
+1は一般的にLISPのリストリテラルを表現する方法で、2は|array|関数を使用する方法
+です。どちらも同じVimScriptの配列に変換されます
+
+* array - expression				*array*
+Syntax:
+ (array {expr} ...)
+	VimScriptの配列に変換されます。
+>
+ (array 1 2 (+ 3 4))
+ ;;VimScriptへの変換後
+ [1, 2, 3 + 4]
+<
+
+辞書						*vise-dictionary*
+-----
+辞書オブジェクトを作成するには|dict|関数を使用します。
+>
+ (dict
+   (key1 "value1")
+   (key2 #t))
+ ;VimScriptへの変換後
+ {'key1' : "value1", 'key2' : 1}
+<
+NOTE:key2の値に指定したブーリアンの#tはVimScriptでは数値の1に変換されます。
+
+* dict - expression				*dict*
+Syntax:
+ (dict ({key} {value}) ...)
+	VimScriptの辞書に変換されます。
+>
+ (dict
+   (num 1)
+   (str "text")
+   (ary '()))
+ ;;VimScriptへの変換後
+ {'num' : 1,'str' : "text",'ary' : []}
+<
+
+------------------------------------------------------------------------------
+FUNCTIONS					*vise-functions*
+
+続いてviseで使用することができる関数を紹介します。
+マクロとして定義しているものに関してはマクロの展開結果も一緒に記述します。
+
+INCLUDE:					*vise-include*
+---------
+
+* include - statement and expression		*include*
+Syntax:
+ (include {str})
+	{str}で指定されたファイルを読み込んで、include式と読み込んだ式を置換し
+	ます。この関数はコンパイルの最初のフェーズで処理され、以降のコンパイル
+	には一切登場しません。この動作はC言語の#includeとよく似ています。
+	指定するファイル名は常にincludeを記述したファイルの位置から相対的に検索
+	されます。
+
+
+DEFINITION:					*vise-definition*
+------------
+
+* defun - toplevel				*defun*
+Syntax:
+ (defun {name} ({var1} ... [. {rest}]) [{modify}] {stmt1} {stmt2} ...)
+ (defun {name} ({var1} ... [:rest {rest}]) [{modify}] {stmt1} {stmt2} ...)
+ (defun {name} {rest} [{modify}] {stmt1} {stmt2} ...)
+ 	関数を定義します。
+	一つ目の構文と二つ目の構文は同じ意味を持ちます。ただし固定引数を持たな
+	い関数で可変長引数を扱いたい場合は、二つ目もしくは三つ目の構文で書く必
+	要があります。
+	rest引数はVimScriptの...に変換されます。
+>
+ (defun has-rest (var1 :rest rest-args)
+   (echo var1)
+   (echo (len rest-args)))
+
+ ;VimScriptへの変換後
+ function! s:has_rest(var1,...)
+   echo a:var1
+   echo len(a:000)
+ eundfunction
+<
+	可変長引数もviseスクリプト中では宣言した名前で参照します。参照する値は
+	VimScriptのa:000になり、常に配列として操作することになります。
+	VimScriptのa:0やa:1はvise上では参照することができません。
+
+	引数宣言に続く{modify}には:normal :range :abort :dictが指定できます。
+	省略した場合は:normalになり、通常の関数定義になります。
+
+	stmtの部分に関数本体で行う処理を記述します。stmtは文の文脈を持つため文
+	の関数しか記述できません。ただし、関数定義の末尾文脈が式だった場合自動
+	的に|return|関数が追加されます。
+
+	関数のスコープはVimScriptと同様に指定することができます。ただし、省略
+	した場合の規定値はs:のスクリプトローカルになります。
+
+* defvar - statement				*defvar*
+Syntax:
+ (defvar {name} {expr})
+	変数の定義は|defvar|関数で行います。
+	変数のスコープはdefun同様にVimScriptと同じ指定ができます。省略した場合
+	規定値はs:のスクリプトローカルになります。
+
+* defmacro - toplevel				*defmacro*
+Syntax:
+ (defmacro {name} ({var1} ... [. {rest}]) {body})
+ (defmacro {name} {rest} {body})
+ (defmacro {name} (match ({pat1} {body1}) ({pat2} {body2}) ...))
+ 	マクロを定義します。
+	一つ目と二つ目は|defun|と似た構文を持ち、意味も同じです。
+	三つ目の構文は{pat1}、{pat2}と複数のパターンを記述でき、マクロが呼ばれ
+	た時は{pat1}から順にパターンマッチングを行い、マッチしたパターンのbody
+	が実行されます。
+>
+ (defmacro zero? (num)
+   `(== 0 ,num))
+
+ (defmacro inc!
+   (match
+     ((_ sym) `(+= ,sym 1))		;(inc! num)の様に1引数のときマッチ
+     ((_ sym delta) `(+= ,sym ,delta))));(inc! num 2)の様に2引数のときにマッチ
+<
+	マクロはコンパイルの初期段階で全て展開されます。つまり、VimScriptへの変
+	換後はマクロ定義のプログラムは消えているということです。
+	マクロをうまく利用することで、VimScriptの実行時に余計な負荷をかけずにコ
+	ンパクトなプログラムを記述できます。
+
+	NOTE:
+	マクロの{body}はコンパイル時に実行するため、viseの記述ができません。
+	実際には{body}はGaucheのプログラムとして実行されます。そのため
+	defumacroを記述するためにはGaucheの知識も必要になってしまいます。
+	viseプログラムを書くためにGaucheの知識も必要というのは短所ではあります
+	が、豊富なGaucheのライブラリも活用できるという点では長所にもなります。
+
+
+ASSIGNMENTS:					*vise-assignments*
+-------------
+
+* set! - statement				*set!*
+Syntax:
+ (set! {var} {expr})
+	{var}変数に対して{expr}を実行した値を再代入します。
+
+
+BINDING-CONSTRUCTS:				*vise-binding-constructs*
+--------------------
+
+* let - statement and expression		*let* *named-let*
+Syntax:
+ (let (({var} {init-expr}) ...) {stmt1} {stmt2} ...)
+ (let {name} (({var} {init-expr}) ...) {stmt1} {stmt2} ...)
+ 	ローカル変数を定義するための関数です。
+	一般的なLISPのlet関数と同じ動作を行います。
+	二つ目の構文のように、名前付きlet(|named-let|)も使用できます。
+
+	変数のスコープはトップレベル文脈でletが使用された場合はスクリプトスコ
+	ープ、その他の文脈でletが使用された場合は関数ローカルなスコープになり
+	ます。
+
+* let* - statement and expression		*let**
+Syntax:
+ (let* (({var} {init-expr}) ...) {stmt1} {stmt2} ...)
+ 	letと同様にローカル変数を定義します。
+	一般的なLISPのlet*と同じ動作を行います。
+
+* let-rec - statement and expression		*let-rec*
+Syntax:
+ (let-rec (({var} {init-expr}) ...) {stmt1} {stmt2} ...)
+
+ 	letと同様にローカル変数を定義します。
+	一般的なLISPのlet-recと同じ動作を行います。
+
+* let1 - statement and expression		*let1*
+Syntax:
+ (let1 {var} {init-expr} {stmt1} {stmt2} ...)
+MacroExpand:
+ (let (({var} {init-expr})) {stmt1} {stmt2} ...)
+ 	一つの束縛を持つletを簡略して記述するための関数です。
+ 
+* rlet1 - statement and expression		*rlet1*
+Syntax:
+ (rlet1 {var} {init-expr} {stmt1} {stmt2} ...)
+MacroExpand:
+ (let (({var} {init-expr})) {stmt1} {stmt2} ... (return {var}))
+ 
+ 	{init-expr}を実行し{var}に代入した後、各{stmt}を順に実行します。最後に
+	{var}の値をrlet1の結果として返します。
+ 
+* if-let1 - statement and expression		*if-let1*
+Syntax:
+ (if-let1 {var} {init-expr} {then} [{else}])
+MacroExpand:
+ (let (({var} {init-expr})) (if {var} {then} [{else}]))
+ 	{init-expr}を実行し{var}に代入した後、{var}の値がtrueであれば{then}節
+	を実行します。falseの場合は{else}節があれば{else}節を実行します。
+
+
+SEQUENCING:					*vise-sequencing*
+------------
+
+* begin - statement and expression		*begin*
+ (begin {expr1} {expr2} ...)
+	各{expr}を左から右に順に実行し、最後に実行した式の結果を返します。
+	begin関数は文・式どちらの文脈にも使用できます。その際各{expr}を実行す
+	る文脈はbegin関数の文脈を引き継ぎます。
+
+* begin0 - statement and expression
+ (begin0 {expr1} {expr2} ...)
+	各{expr}を左から右に順に実行し、{expr1}の結果を返します。
+
+
+CONDITIONALS:					*vise-conditionals*
+--------------
+
+* if - statement and expression			*if*
+Syntax:
+ (if {test} {then} [{else}])
+	条件分岐を行うための関数です。
+	if関数は文・式どちらの文脈でも使用できます。ただし式文脈でifを使用し
+	た場合{else}式の省略はできません。さらに、文文脈のif関数では{then}、
+	{else}ともに文文脈になり、式文脈のif関数では{then}、{else}ともに式文
+	脈になります。
+	文・式のif関数はそれぞれ以下のようにVimScriptに展開されます。
+>
+ ;文文脈のif
+ (if test
+   (echo "true")
+   (echo "false"))
+ ;式文脈のif
+ (echo (if test "true" "false"))
+
+ ;VimScriptへ変換後
+ ;文文脈のif
+ if test
+   echo "true"
+ else
+   echo "false"
+ endif
+ ;式文脈のif
+ echo ((test) ? "true" : "false")
+<
+	また、次の例のように、
+>
+ (if test
+   (echo "true")
+   (if other-test
+     (echo "other true")))
+<
+	{else}式に|if|関数がある場合のVimScriptへの変換結果は、
+>
+ if test
+   echo "true"
+ elseif other_test
+   echo "other true"
+ endif
+<
+	のようにelseifを使って出力されます。
+	
+* cond - statement and expression		*cond*
+Syntax:
+ (cond (({test1} {then1}) ({test2} {then2}) ... [(else {else})]))
+MacroExpand:
+ (if {test1} {then1} (if {test2} {then2} [{else}]))
+	複数の条件分岐を行うための関数です。
+	{test1}から順に実行して行き、結果がtrueになった節のthen式が実行されま
+	す。
+	cond関数はif関数同様、文・式どちらの文脈にも使用できます。その際の制
+	限(式文脈の時はelse必須。{then}と{else}の文脈はcondの文脈を引き継ぐ)
+	も同じです。
+
+* when - statement				*when*
+Syntax:
+ (when {test} {stmt1} {stmt2} ...)
+MacroExpand:
+ (if {test} (begin {stmt1} {stmt2} ...))
+	{test}を実行して結果がtrueだったとき各{stmt}を順に実行します。
+
+* unless - statement				*unless*
+Syntax:
+ (unless {test} {stmt1} {stmt2} ...)
+MacroExpand:
+ (if (not {test}) (begin {stmt1} {stmt2} ...))
+	{test}を実行して結果がfalseだったとき各{stmt}を順に実行します。
+
+
+ITERATION:					*vise-iteration*
+-----------
+
+* while - statement				*while*
+Syntax:
+ (while {test} {stmt1} {stmt2} ...)
+	{test}式の結果がtrueになるまで、各{stmt}の実行を繰り返し行います。
+
+* until - statement				*until*
+Syntax:
+ (until {test} {stmt1} {stmt2} ...)
+MacroExpand:
+ (while (not {test}) {stmt1} {stmt2} ...)
+	{test}式の結果がfalseになるまで、各{stmt}の実行を繰り返し行います。
+
+* dolist - statement				*dolist*
+Syntax:
+ (dolist ({var} {expr}) {stmt1} {stmt2} ...)
+	{expr}を実行した結果の配列の各要素を{var}に代入して{stmt}を実行します。
+
+	NOTE:dolist関数はVimScriptのforコマンドに変換されます。
+	NOTE:{var}のスコープは|let|関数と同じ規則に従い、使用される文脈によって
+	変化します。
+
+* for-each - statement				*for-each*
+Syntax:
+ (for-each (lambda ({var}) {stmt1} {stmt2} ...) {array})
+ (for-each {proc} {array})
+MacroExpand:
+ (dolist ({var} {array}) {stmt1} {stmt2} ...)
+ (dolist (var {array}) ({proc} var))
+ 	|for-each|は引数を一つ取る手続きと配列を取り、配列の各要素を順に手続
+	きに適用させていく関数です。
+
+
+PROCEDURES:					*vise-procedures*
+------------
+
+* lambda - expression
+Syntax:
+ (lambda ({var1} ... [. {rest}]) {stmt1} {stmt2} ...)
+ (lambda ({var1} ... [:rest {rest}]) {stmt1} {stmt2} ...)
+ (lambda {rest} {stmt1} {stmt2} ...)
+ 	手続きを作成します。
+	仮引数部と関数本体は|defun|と同じ構文を持ちます。末尾文脈が式だった場
+	合に自動的に|return|関数が追加されることも|defun|と同じです。
+
+	lambdaで作成された手続きは、手続きが作成した環境を引き継いで変数参照を
+	解決することができる、いわゆるクロージャになります。
+	たとえば、
+>
+ (defvar proc (let ((a 10))
+                (lambda (b) (+ a b))))
+ (echo (proc 1))	; 11が出力される
+ (echo (proc 100))	; 110が出力される
+<
+	上記プログラムのように、procに束縛されるlambdaで作成された手続きは、
+	静的スコープにおいて変数aを参照できる環境で作成されています。そのため、
+	aを参照できるスコープ以外からproc手続きを実行したときでも、proc手続き
+	内では正しくaを参照し処理を実行できます。
+
+
+COMMANDS:					*vise-commands*
+----------
+
+* autocmd - statement				*autocmd*
+ (autocmd [{group}] ({event1} {event2} ...) {pattern} [:nested] {stmt})
+ 	Vimの自動コマンドを定義します。
+	{group}は省略することが出来ます。指定する場合はシンボルでなければなり
+	ません。
+	関連付けるイベント指定は、({event1} {event2} ...)のように行います。一
+	つ以上のイベントを関連付けることが出来ます。
+	{pattern}はシンボル、もしくは文字列で記述します。
+	{stmt}は文文脈を持ち、一つの式を指定します。
+	autocmdの詳細な解説は:help autocmdを参照してください。
+	
+	NOTE:既存コマンドを削除するautocmd!関数も存在します。
+
+* augroup - statement				*augroup*
+ (augroup [{group}] {stmt} ...)
+	Vimの自動コマンドグループを定義します。
+	{group}をシンボルで指定されている場合作成されるグループ名になります。
+	シンボルでなければ現在のグループが使用されます。
+>
+ (augroup group
+   (autocmd (BufEnter) <buffer> (echo "in buffer")))
+ ;この関数は以下のVimScriptに変換されます。
+ augroup group
+   autocmd BufEnter <buffer> echo "in buffer"
+ augroup END
+<
+	NOTE:既存コマンドグループを削除するaugroup!関数も存在します。
+
+* try - statement				*try*
+Syntax:
+ (try {stmt} [({errmsg} {stmt} ...) ...])
+	Vimのtryコマンドに変換されます。
+	{stmt}は文文脈を持ち、一つの式を指定します。
+	各catch節は({errmsg} {stmt} ...)で設定します。{errmsg}に捕捉したいエラ
+	ーメッセージのパターンを文字列で指定します。{errmsg}にシンボルでelseと
+	指定した場合、全てのエラーを捕捉するcatch節になります。またfinallyと指
+	定した場合、finally節になります。
+>
+ (try
+   (sleep 100)
+   (#/^Vim:Interrupt$/))
+
+ (try
+   (edit)
+   (#/^Vim(edit):E\d\+/ (echo "error"))
+   (else (echo "else"))
+   (finally (echo "finally")))
+<
+
+* raw-vimscript - statement and expression	*raw-vimscript*
+Syntax:
+ (raw-vimscript {expr} ...)
+	{expr}に文字列を指定した場合それがそのままVimScriptのスクリプトに変換
+	されます。文字列以外の式の場合は式文脈で評価され通常通りVimScriptへ変
+	換されます。
+	この関数は文・式文脈どちらでも使用することができます。
+
+	NOTE:viseが対応していないVimScript構文を記述したい時に利用できます。
+>
+ (raw-vimscript "
+ nmap <buffer> <CR> echo \"Carriage return\"
+ ")
+<
+* return - statement				*return*
+Syntax:
+ (return [{expr}])
+	VimScriptのreturnコマンドに変換されます。{expr}を指定した場合戻り値に
+	なります。
+
+* break - statement				*break*
+Syntax:
+ (break)
+	VimScriptのbreakに変換されます。
+
+* continue - statement				*continue*
+Syntax:
+ (continue)
+	VimScriptのcontinueに変換されます。
+
+* setlocal - statement				*setlocal*
+Syntax:
+ (setlocal {symbol} [{expr} ...])
+	VimScriptのsetlocalに変換されます。{expr}は省略できます。{expr}を複数
+	指定した場合スペースを挟んで列挙されます。
+>
+ (setlocal 'buftype 'nofile 'noswapfile)
+ ;この関数は以下のVimScriptに変換されます。
+ setlocal buftype=nofile noswapfile
+<
+
+以下のコマンドは全て文文脈であり、同じ構文を持っています。
+* echo						*echo*
+* echon						*echon*
+* echohl					*echohl*
+* echomsg					*echomsg*
+* execute					*execute*
+* normal					*normal*
+* normal!					*normal!*
+* tag						*tag*
+* sleep						*sleep*
+* enew						*enew*
+* silent					*silent*
+* silent!					*silent!*
+* unlet						*unlet*
+* unlet!					*unlet!*
+* startinsert					*startinsert*
+* startinsert!					*startinsert!*
+* stopinsert					*stopinsert*
+* edit						*edit*
+* source					*source*
+* autocmd!					*autocmd!*
+* augroup!					*augroup!*
+* finish					*finish*
+* throw						*throw*
+Syntax:
+ (cmd {expr} ...)
+	それぞれVimScriptの同名コマンドに変換されます。{expr}はいくつでも指定
+	することができ、複数ある場合はスペースを挟んで列挙されます。
+
+* vim-cmd - statement				*vim-cmd*
+Syntax:
+ (vim-cmd {cmd} {expr} ...)
+	汎用のVimコマンド関数です。専用の関数が用意されていないVimコマンドを
+	使用するために用意されています。{expr}の展開方法はechoコマンドなどの
+	{expr}と同じです。
+>
+ ;二つの式は同じVimScriptに変換されます。
+ (vim-cmd 'echo 123)
+ (echo 123)
+<
+
+* qq-str - expression				*qq-str*
+Syntax:
+ (qq-str {str})
+	|qq-str|は準引用符(`)で囲った文字を出力したいときに使用する関数です。
+	この準引用の文字列はよくVimの:editコマンドとともに使用します。
+	詳しい使用方法は:help backtick-expansionを参照してください。
+	{str}は文字列のみ指定できます。
+
+* qq= - expression				*qq=*
+Syntax:
+ (qq= {str})
+	|qq=|は`={str}`の様な文字列を出力したいときに使用する関数です。
+	この準引用の文字列はよくVimの:editコマンドとともに使用します。
+	詳しい使用方法は:help `=を参照してください。
+	{str}は文字列のみ指定できます。
+
+
+------------------------------------------------------------------------------
+OPERATORS					*vise-operators*
+
+ここではviseで使用できる演算子を紹介します。
+
+* +  - expression				*+* *plus*
+* -  - expression				*-* *minus*
+* /  - expression				*/* *div*
+* *  - expression				*** *mul*
+* && - expression				*&&*
+* || - expression				**
+* string-append - expression			*string-append*
+Syntax:
+ (op {expr} ...)
+	これらは全て可変長の引数を取ることができる関数です。
+	最初四つは四則演算用の関数で、対応する演算子にそのまま変換されます。
+	&&と||は論理演算用の関数で、対応する演算子にそのまま変換されます。
+	string-appendは文字列連結のための関数で、VimScriptでは.の演算子に変換
+	されます。
+
+* += - statement				*+=*
+* -= - statement				*-=*
+* .= - statement				*.=*
+Syntax:
+ (op {var} {expr} ...)
+	この関数は演算と代入を同時に行う処理を簡易的に書くためのものです。
+	次の二つの式は同じ意味のVimScriptに変換されます。
+>
+ (+= var 1 2 3)
+ (set! var (+ var 1 2 3))
+<
+* % - expression				*%*
+Syntax:
+ (% {expr1} {expr2})
+ 	%関数は剰余を求める数学関数です。これはVimScriptの{expr1}%{expr2}と同
+	等の式に変換されます。
+
+* not - expression				*not*
+Syntax:
+ (not {expr})
+ 	not関数は否定(!)の論理演算関数です。一つの引数のみを取り、真偽値を逆
+	にした値を返します。
+
+* <   - expression				*<*
+* <=  - expression				*<=*
+* >   - expression				*>*
+* >=  - expression				*>=*
+* ==  - expression				*==*
+* !=  - expression				*!=*
+* is  - expression				*is*
+* isnot - expression				*isnot*
+* ==# - expression				*==#*
+* !=# - expression				*!=#*
+* >#  - expression				*>#*
+* >=# - expression				*>=#*
+* <#  - expression				*<#*
+* <=# - expression				*<=#*
+* ==? - expression				*==?*
+* !=? - expression				*!=?*
+* >?  - expression				*>?*
+* >=? - expression				*>=?*
+* <?  - expression				*<?*
+* <=? - expression				*<=?*
+* =~  - expression				*=~*
+* =~# - expression				*=~#*
+* =~? - expression				*=~?*
+* !~  - expression				*!~*
+* !~# - expression				*!~#*
+* !~? - expression				*!~?*
+Syntax:
+ (op {expr1} {expr1})
+	これらは全て比較用の関数です。{expr1}と{expr2}を比較した結果の真偽値
+	を返します。全てVimScriptの同名の比較演算子に変換されます。
+
+* ref - expression				*ref*
+Syntax:
+ (ref {expr} {index-expr1} {index-expr2} ...)
+	refは文字列・配列・辞書型のオブジェクトの各要素を参照するための関数で
+	す。{expr}に文字列・配列を指定した場合、各{index-expr}は実行後整数にな
+	る式を指定しなければなりません。
+	{expr}に辞書を指定した場合、各{index-expr}は実行後文字列になる式、もし
+	くはシンボルリテラルを指定します。
+>
+ (ref ary 1 2 3)
+ (ref dict 'key1 'key2)
+ ;VimScriptへ変換後
+ ary[1][2][3]
+ dict["key1"]["key2"]
+<
+* subseq - expression				*subseq*
+Syntax:
+ (subseq {expr} [{start-expr} [{end-expr}]])
+	subseqは文字列や配列の一部分を切り出すための関数です。{start-expr}と
+	{end-expr}は省略可能です。
+	この関数はVimScriptへの変換後{expr}[{start-expr}:{end-expr}]の式に変
+	換されます。
+
+
+組込みVimScript関数
+----------------------
+組込みVimScript関数も通常通りviseで使用できます。名称や引数の指定方法などは
+VimScript上の関数と同じです。
+ただし、組込み関数は数が多くさらにVim自体のバージョンが上がる際に増えることが
+あるため、使用したい関数が未定義となっているかもしれません。そのような時は
+autoload/vgenディレクトリにあるvim-function.scmファイルに関数名を一行足してく
+ださい。そうすれば使えるようになります。
+
+
+==============================================================================
+TIPS						*vise-tips*
+
+
+letによるローカルスコープ			*vise-nested-scope*
+--------------------------
+
+|let|関数は変数を定義しローカルスコープを作成します。let式で宣言した変数を参
+照できるのはlet式内だけです。letより外のスコープから変数を参照した場合、コン
+パイル段階でエラーになります。
+例えばVimScriptでは以下の関数は正常に動作します。
+>
+ function! s:example()
+   if 1
+     let var = "local"
+     echo "in if " . var
+   endif
+   echo "outside if ". var
+ endfunction
+<
+VimScriptでは関数内のローカル変数は（定義以降の）関数全体がスコープになります。
+C言語などにあるようなブロックスコープは存在しません。
+では次に、同じような関数をviseで書いてみます。
+>
+ (defun example ()
+   (if #t
+     (let ((var "local"))
+       (echo (string-append "in if " var))))
+   (echo (string-append "outside if " var)))
+<
+この関数はコンパイルできないでしょう。以下の様なエラーが出力されるはずです。
+>
+ *** vise ERROR: var reference does not exists.
+  Related location:(echo (string-append "outside if " var)
+<
+このエラーは、varの参照が見つからないという意味です。さらに、エラー場所の式と
+して(echo ...)の部分を提示しています。
+このようにletによって作成された変数はそのスコープ内でしか参照できません。そし
+て参照のチェックはコンパイル段階にて行われます。
+
+
+分解束縛					*vise-let-unpack*
+---------
+
+VimScriptは分配束縛が可能な言語です。たとえば以下の様な記述が可能です。
+>
+ let [a,b] = [1, 2] "a = 1, b = 2
+ let [head ; tail] = [1, 2, 3, 4] "head = 1, tail = [2, 3, 4]
+<
+これと同じことを行うためにviseは以下の様な構文を持っています。
+>
+ (defvar (a b) '(1 2))
+ ;以下の二つは同じ意味を持つ
+ (defvar (head :rest tail) '(1 2 3 4))
+ (defvar (head . tail) '(1 2 3 4))
+<
+普通はシンボルで変数名を書くところにリストでシンボルを列挙することで、分解束
+縛のVimScriptに変換できます。
+
+
+入子スコープの同名変数				*vise-name-duplicate*
+----------------------
+
+viseの|let|関数はいくらでも入子にして使用できます。つまり、ローカルスコープも
+入子構造にできるということです。これはいろいろなプログラミング言語で行われて
+いるので特別不思議なことではありません。
+さらにviseの|let|関数では入子になったスコープ内で外側のスコープに存在する変数
+名と同名の変数を定義することができます。しかしVimScriptでは関数ローカルな同名
+変数を定義することはできません。定義しようとした場合、すでに存在する変数の値
+を上書きしてしまうことになります。
+ではviseではどのように同名変数を定義しているのでしょうか？
+これは実際にviseスクリプトをVimScriptに変換して確認するのが早いでしょう。
+>
+ (let ((var "outer"))
+   (echo var)
+   (let ((var "inner"))
+     (echo var)))
+<
+このスクリプトがトップレベルにある場合、以下の様なVimScriptに変換されます。
+>
+ let s:var_411 = "outer"
+ echo s:var_411
+ let s:var_412 = "inner"
+ echo s:var_412
+<
+同名変数の仕組みはいたって単純です。vise上では同名のシンボルになっていても、
+VimScriptに変換された後は別な変数名に変換されているのです。例では_411の様な接
+尾語がvarの後に追加されています。この具体的な数字はviseスクリプトの内容によっ
+て変化するでしょう。この数字を追加することで常にVimScript上では変数名がユニー
+クになります。
+
+
+末尾再帰呼出しの最適化				*vise-tail-call-optimize*
+-----------------------
+
+LISPでは処理を反復して行いたいとき、ループも使われますが関数の再起呼出しもよ
+く使用されます。また、呼び出しが末尾文脈で行われている時、無駄なメモリリソー
+スを消費することがなく関数呼出しが行えます。そのような処理を末尾呼出最適化と
+よびます。
+VimScriptでは末尾呼出最適化を行ってくれません。ですがLISPの様な構文を持つ言語
+でプログラムを書くのですからループ構文ばかり使用するのでは違和感があります。
+そこでviseでは、コンパイル時にプログラムを解析して可能であれば末尾再帰呼出の
+最適化を行います。
+たとえば次の例は末尾再帰呼出最適化が可能です。
+>
+ (defun fact (n)
+   (let loop ((acc 1)
+              (n n))
+     (if (== n 0)
+       acc
+       (loop (* acc n) (- n 1)))))
+<
+factは階乗を求める関数です。fact内の|named-let|によって暗黙的に作られた関数が
+末尾文脈で再帰的に呼ばれています。
+fact関数は以下の様なVimScriptに変換されます。(読みやすさを重視するため、変数名
+に付けられる接尾語は省いています)
+>
+ function! s:fact(n)
+   let acc = 1
+   let n = a:n
+   let recursion = 1
+   while recursion
+     let recursion = 0
+     if n == 0
+       return acc
+     else
+       let recursion = 1
+       let acc = acc * n
+       let n = n - 1
+     endif
+   endwhile
+ endfunction
+<
+変換結果を見てわかるとおり、関数呼び出しがwhileループに置き換わっています。こ
+の置き換えのためにrecursionという変数をコンパイラが自動的に作成しています。こ
+のrecursionをループの制御変数として、viseでは関数呼び出しになっていた部分で1
+に設定し、続けて関数の引数として渡していた変数の更新作業を行うことによって、本
+来関数呼び出しであったところを単なるループに置き換えています。
+
+
+==============================================================================
+REPL						*vise-repl*
+
+viseはVimScriptプラグインとして動作するREPLを標準で持っています。最初の
+|vise-install|の項でも書いたように、REPLの動作にはGaucheとVimプラグインである
+vimprocが必要です。
+REPLでは特別にトップレベルにも式文脈の式の記述ができるようになっています。
+トップレベルに式を記述した場合、式を実行した結果が出力されます。
+
+------------------------------------------------------------------------------
+COMMANDS					*vise-repl-commands*
+
+:ViseREPL					*:ViseREPL*
+	別バッファでViseREPLを起動します。
+
+:ViseREPLOutputScript				*:ViseREPLOutputScript*
+	|:ViseREPL|と同じくREPLを起動して、同時にVimScriptへの変換結果を確認す
+	るためのバッファを開きます。
+
+
+==============================================================================
+EXAMPLES					*vise-examples*
+
+viseで書かれたスクリプトの例としてはviseREPLのソースコードがいいでしょう。vise
+でどのようなことができるのかがわかると思います。REPLのソースコードはautoloadデ
+ィレクトリ以下の.viseの拡張子のファイルです。
+また、実際に小さなviseスクリプトを書いて変換して見比べてみるとviseとVimScriptの
+つながりがわかりやすくなるかもしれません。
+
+
+==============================================================================
+UNSUPPORT					*vise-unsupport*             
+
+viseはまだたくさんのVimコマンドをサポートできていません。
+サポートできていないコマンドの中で比較的使う機会が多いコマンドはキーマップ系の
+コマンドでしょう(map、nmap、imapなど派生する全てのコマンド)。これらのコマンド
+をviseで使用する場合は|vim-cmd|関数を使用するか、|raw-vimscript|関数を使用して
+文字列として直接VimScriptを埋め込む必要があります。
+
+たくさんのVimコマンドがサポートできていない理由として、まずVimコマンドが膨大で
+あるということがあげられます。数が多すぎるため(開発者の主観として)重要度の高い
+ものから先にサポートを進めています。
+
+ですが、キーマップ系の関数をサポートしていないのは別の理由があります。その理由
+とはキーマップ系の関数をうまく表現するためのLISP的な構文を開発者は思いつかなか
+ったのです。この問題をきれいに解決できる妙案をお持ちの方はぜひご一報ください。
+
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:noet:fen:fdl=0:
