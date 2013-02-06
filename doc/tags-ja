@@ -105,6 +105,7 @@ vise-compile	vise.jax	/*vise-compile*
 vise-conditionals	vise.jax	/*vise-conditionals*
 vise-contents	vise.jax	/*vise-contents*
 vise-context	vise.jax	/*vise-context*
+vise-dead-code-elimination	vise.jax	/*vise-dead-code-elimination*
 vise-definition	vise.jax	/*vise-definition*
 vise-dictionary	vise.jax	/*vise-dictionary*
 vise-examples	vise.jax	/*vise-examples*

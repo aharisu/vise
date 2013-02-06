@@ -1000,15 +1000,43 @@ fact関数は以下の様なVimScriptに変換されます。(読みやすさを
 来関数呼び出しであったところを単なるループに置き換えています。
 
 
+不要な式の削除					*vise-dead-code-elimination*
+-----------------------
+
+viseではコンパイル段階で変数の参照回数などを解析しています。
+この結果を利用してプログラムの動作に支障がない範囲で式の削除を行います。
+具体的な動作は例題を見るとわかりやすいでしょう。
+>
+ (defvar debug #f)
+ (defun test ()
+   (when debug
+     (echomsg "debugging"))
+   (unless debug
+     (echomsg "not debugging")))
+
+ ;;VimScriptへの変換後
+ let s:debug = 0
+
+ function! s:test()
+   if !s:debug
+     echomsg "not debugging"
+   endif
+ endfunction
+<
+vise上のdebugという変数にはリテラルで#fが設定されています。そして一度も再束縛
+されていません(set!の対象になっていない)。この条件からコンパイル段階で変数
+debugの値は#fであると確定するのでwhenなどの分岐処理で不要な式が削除できます。
+
+
 ==============================================================================
 REPL						*vise-repl*
 
 viseはVimScriptプラグインとして動作するREPLを標準で持っています。
-最初の|vise-install|の項でも書いたように、REPLの動作にはGaucheとVimプラグインである
-vimprocが必要です。
-また、viseREPL自体viseスクリプトとして書かれているのでVimScriptに変換するために
-makeを実行する必要があります。Makefileはルートディレクトリにあるので、ルートディ
-レクトリで一度makeコマンドを実行してください。
+最初の|vise-install|の項でも書いたように、REPLの動作にはGaucheとVimプラグイン
+であるvimprocが必要です。
+また、viseREPL自体viseスクリプトとして書かれているのでVimScriptに変換するため
+にmakeを実行する必要があります。Makefileはルートディレクトリにあるので、ルート
+ディレクトリで一度makeコマンドを実行してください。
 
 REPLでは通常の文脈制限とは異なり、特別にトップレベルにも式文脈の式の記述ができる
 ようになっています。
@@ -1032,8 +1060,8 @@ EXAMPLES					*vise-examples*
 viseで書かれたスクリプトの例としてはviseREPLのソースコードがいいでしょう。vise
 でどのようなことができるのかがわかると思います。REPLのソースコードはautoloadデ
 ィレクトリ以下の.viseの拡張子のファイルです。
-また、実際に小さなviseスクリプトを書いて変換して見比べてみるとviseとVimScriptの
-つながりがわかりやすくなるかもしれません。
+また、実際に小さなviseスクリプトを書いて変換して見比べてみるとviseとVimScript
+のつながりがわかりやすくなるかもしれません。
 
 
 ==============================================================================
