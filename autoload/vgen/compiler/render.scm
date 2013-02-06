@@ -28,8 +28,9 @@
           . ,(lambda (form ctx loop)
                (when (vsymbol? form)
                  (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
-                   (when (and d outside? (or* eq? (@ d.scope) 'local 'arg))
-                     (attr-push! d 'free))))
+                   (if (and d outside? (or* eq? (@ d.scope) 'local 'arg))
+                     (attr-push! d 'free)
+                     (attr-remove! d 'free))))
                form))
         (,traverse-apply-function-hook
           . ,(lambda (form ctx loop)
@@ -95,14 +96,14 @@
                                 `(defun ,func-name args :normal ,,@body)))))
                         func-name))))
 
-(define (vim-ref-symbol symbol :optional env)
+(define (vim-ref-symbol symbol :optional (unboxing? #t) env)
   (receive (d outside?) (if (vsymbol? symbol)
                           (env-find-data-with-outside-lambda? 
                             (if (undefined? env) (@ symbol.env) env)
                             symbol)
                           (values #f #f))
     ($ (lambda (sym)
-         (if (boxing? symbol)
+         (if (and unboxing? (boxing? symbol))
            (vim-unboxing sym)
            sym))
       $ (lambda (sym)
@@ -420,7 +421,7 @@
         (display
           (string-join
             (map
-              (lambda (var) #`"',(vim-symbol var)':,(vim-ref-symbol var (slot-ref (car form) 'env))")
+              (lambda (var) #`"',(vim-symbol var)':,(vim-ref-symbol var #f (slot-ref (car form) 'env))")
               (car free&self-rec))
             "," 'prefix))
         (display "}")))))
@@ -446,30 +447,19 @@
           ;;constract auto generate function
           `(,(make <vsymbol> :exp 'defun :env (slot-ref (car form) 'env))
              ,func-name
-                  ,(map 
-                     (lambda (vars)
-                       ;;chage scope local -> arg
-                       (slot-set! (env-find-data (car vars)) 'scope 'arg)
-                       (car vars))
-                     (cadr form))
-                  :normal
-                  ,@(if (all-ref-only? (map car (cadr form)))
-                      (cddr form)
-                      ;;surrounded by let
-                      (let* ([injection-env (assq-ref (slot-ref (car form) 'prop) 'injection-env)]
-                             [new-injection-env (env-injection injection-env)])
-                        ;;make new injection-env
-                        (assq-set! (slot-ref (car form) 'prop) 'injection-env new-injection-env)
-                        `((,(make <vsymbol> :exp 'let :env injection-env)
-                            ,(map
-                               (lambda (var)
-                                 (list
-                                   (rlet1 sym (make <vsymbol> :exp var :env injection-env)
-                                     (env-add-symbol injection-env sym 'local))
-                                   (make <vsymbol> :exp var :env new-injection-env)))
-                               (map (.$ vexp car) (cadr form)))
-                            ;;original body
-                            ,@(cddr form))))))))
+             ,(map 
+                (lambda (vars)
+                  ;;chage scope local -> arg
+                  (slot-set! (env-find-data (car vars)) 'scope 'arg)
+                  (car vars))
+                (cadr form))
+             :normal
+             ,@(if (all-ref-only? (map car (cadr form)))
+                 (cddr form)
+                 ;;surrounded by let
+                 (list (surround-let (slot-ref (car form) 'prop) 
+                                     (map car (cadr form)) ;args
+                                     (cddr form))))))) ;body
       ;;call auto generate function
       (vise-render 'expr `(,func-name ,@(map cadr (cadr form)))))
     ;;render stetment context let

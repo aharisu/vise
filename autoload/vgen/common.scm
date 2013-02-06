@@ -244,6 +244,27 @@
     (@! env.parent inject)
     inject))
 
+(define (surround-let prop args body)
+  (let* ([injection-env (assq-ref prop 'injection-env)]
+         [new-injection-env (env-injection injection-env)])
+    ;;make new injection-env
+    (assq-set! prop 'injection-env new-injection-env)
+    `(,(make <vsymbol> :exp 'let :env injection-env)
+       ,(map
+          (lambda (arg)
+            (list
+              (rlet1 sym (make <vsymbol> :exp (vexp arg) :env injection-env) 
+                (let ([arg-data (env-find-data arg)]
+                      [new-data (env-add-symbol injection-env sym 'local)])
+                  (@! new-data.ref-count (@ arg-data.ref-count))
+                  (@! new-data.set-count (@ arg-data.set-count))
+                  (@! arg-data.ref-count 1)
+                  (@! arg-data.set-count 0)))
+              (make <vsymbol> :exp (vexp arg) :env new-injection-env)))
+          args)
+       ,@body)))
+
+
 (define (print-env-table env)
   (let loop ((env env))
     (for-each
