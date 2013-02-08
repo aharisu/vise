@@ -88,7 +88,11 @@
                          (make <vmacro>
                                :exp (lambda (form) 
                                       defs ...
-                                      (match form . clauses))
+                                      (guard (e [(<error> e)
+                                                 (if (string-scan (slot-ref e 'message) "no matching clause for")
+                                                   (vise-error "no matching macro pattern clause.\n\tRelated location: ~a" form)
+                                                   (raise e))])
+                                        (match form . clauses)))
                                :env env))]
     [(_ env "clauses" op clauses ())
      (register-macro env "clauses" op clauses (:where))]
