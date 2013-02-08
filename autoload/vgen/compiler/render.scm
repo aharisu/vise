@@ -28,9 +28,10 @@
           . ,(lambda (form ctx loop)
                (when (vsymbol? form)
                  (receive (d outside?) (env-find-data-with-outside-lambda? (@ form.env) form)
-                   (if (and d outside? (or* eq? (@ d.scope) 'local 'arg))
-                     (attr-push! d 'free)
-                     (attr-remove! d 'free))))
+                   (when d
+                     (if (and outside? (or* eq? (@ d.scope) 'local 'arg))
+                       (attr-push! d 'free)
+                       (attr-remove! d 'free)))))
                form))
         (,traverse-apply-function-hook
           . ,(lambda (form ctx loop)
