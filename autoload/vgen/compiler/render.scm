@@ -693,9 +693,9 @@
 (define-vim-cmd startinsert! "startinsert!")
 (define-vim-cmd stopinsert "stopinsert")
 (define-vim-cmd edit "edit")
-(define-vim-cmd setlocal "setlocal")
 (define-vim-cmd source "source")
 (define-vim-cmd autocmd! "autocmd!")
+(define-vim-cmd augroup! "augroup!")
 (define-vim-cmd finish "finish")
 (define-vim-cmd throw "throw")
 ;;TODO
@@ -903,10 +903,6 @@
 
 (define-unary not    "!")
 (define-one-arg-operation-ref not)
-(define-unary lognot "~")
-(define-one-arg-operation-ref lognot)
-(define-unary &      "&")               ; only unary op
-(define-one-arg-operation-ref not)
 
 (define-macro (define-binary op sop)
   `(define-vise-renderer (,op form ctx) expr
@@ -1046,9 +1042,7 @@
 
 (define-vise-renderer (qq-str form ctx) expr
   (ensure-expr-ctx form ctx)
-  (**-str form "`" (lambda (str)
-                     (let1 str (write-to-string str display)
-                       substring str 1 (- (string-length str) 1))) ))
+  (**-str form "`" (cut write-to-string <> display)))
 
 (define-vise-renderer (qq= form ctx) expr
   (ensure-expr-ctx form ctx)

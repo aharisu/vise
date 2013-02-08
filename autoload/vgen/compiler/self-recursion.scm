@@ -96,8 +96,9 @@
                  , (find-tail-exp
                      (lambda (exp ctx)
                        (cond
-                         [(and (list? exp) (not (list? (car exp))) (not (eq? (vexp (car exp)) 'quote)) 
-                            (vsymbol? (car exp)) (eq? self-data (env-find-data (car exp))))
+                         [(and (list? exp) 
+                            (vsymbol? (car exp)) (not (eq? (vexp (car exp)) 'quote)) 
+                            (eq? self-data (env-find-data (car exp))))
                           (@dec! self-data.ref-count)
                           (set! has-tail-recursion? #t)
                           (expand-expression

@@ -171,6 +171,11 @@
     env
     (unless test . body)
     `(if (not ,test) (begin ,@body)))
+  ;;until
+  (register-macro 
+    env
+    (until test . body)
+    `(while (not ,test) ,@body))
   ;;map
   (register-macro
     env
