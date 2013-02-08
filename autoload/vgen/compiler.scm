@@ -81,7 +81,7 @@
                        (pa$ vise-phase-check global-env)
                        vise-phase-add-repl-eval
                        (pa$ vise-phase-expand global-env)
-                       (pa$ vise-phase-include (append load-path (cons (get-file-path in-port) '()))))])
+                       (pa$ vise-phase-include load-path (get-file-path in-port)))])
     (parameterize ([toplevel-env global-env]
                    [script-prefix "b:"])
       (letrec ((repl (lambda ()
