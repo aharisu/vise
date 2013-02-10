@@ -31,13 +31,13 @@
     [(list? exp)
      (case (car exp)
        [(quote) exp]
-       [(defmacro) ;top level
-        (unless (env-toplevel? env)
+       [(defmacro) ;only top level context
+        (unless (eq? ctx 'toplevel)
           (vise-error "defmacro can only be defined at top level.\n\tRelated location:~a" exp))
         (eval `(register-macro ,env ,@(cdr exp)) (current-module))
         #f]
-       [(defun) ;top level
-        (unless (env-toplevel? env)
+       [(defun) ;only context top level context
+        (unless (eq? ctx 'toplevel)
           (vise-error "defun can only be defined at top level.\n\tRelated location:~a" exp))
         (expand-defun env ctx parent exp)]
        [(defvar) (expand-defvar env ctx parent exp)]
@@ -450,7 +450,7 @@
                     :prop `((body-env . ,let-env) (injection-env . ,injection-env)))
               ,vars
               ,@(map ;body
-                  (pa$ expand-expression injection-env 'stmt exp)
+                  (pa$ expand-expression injection-env (if (eq? ctx 'toplevel) 'toplevel 'stmt) exp)
                   (cddr exp))))))]
     ;;named-let
     [(let (? symbol? name) ((var . spec) ...) . body)

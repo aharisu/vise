@@ -15,7 +15,7 @@
     form-list
     `((defun . ,(pa$ add-return #f))
       (lambda . ,(pa$ add-return #t))
-      (let . ,(pa$ add-return #t)))))
+      (let . ,add-return-let))))
 
 (define (return-add? exp ctx)
   (and (eq? ctx 'stmt) 
@@ -26,6 +26,15 @@
 
 (define (add-return-defun form)
   (add-return #f form #f #f))
+
+(define (add-return-let form ctx loop)
+  (if (eq? ctx 'toplevel)
+    `(,(car form)
+       ,(map
+          (lambda (clause) (list (car clause) (loop 'expr (cadr clause))))
+          (cadr form))
+       ,@(map (pa$ loop 'toplevel) (cddr form))) 
+    (add-return #t form ctx loop)))
 
 (define (add-return lambda? form ctx loop)
   (let1 ret (let1 env (slot-ref (car form) 'env)

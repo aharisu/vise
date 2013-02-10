@@ -471,7 +471,8 @@
           (render-symbol-bind (car vars) (cadr vars)))
         (cadr form))
       ;;render body
-      (vise-render 'stmt `(begin ,@(cddr form))))))
+      (vise-render (if (eq? ctx 'toplevel) 'toplevel 'stmt)
+                   `(begin ,@(cddr form))))))
 
 
 (define-vise-renderer (begin form ctx) stmt

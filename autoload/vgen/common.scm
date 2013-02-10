@@ -212,8 +212,6 @@
     (when parent
       (@push! env.parent.children env))))
 
-(define env-toplevel?  (.$ not (cut slot-ref <> 'parent)))
-
 (define (env-add-symbol env symbol scope :key (attr '()))
   (env-add-symbol&exp env symbol scope #f :attr attr))
 
@@ -461,7 +459,7 @@
                (map
                  (lambda (clause) (list (car clause) (loop 'expr (cadr clause))))
                  (cadr form)))
-             (map (pa$ loop 'stmt) (cddr form)))]
+             (map (pa$ loop (if (eq? ctx 'toplevel) 'toplevel 'stmt)) (cddr form)))]
           [(dolist)
            (append
              (list

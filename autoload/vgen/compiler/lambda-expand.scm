@@ -23,7 +23,7 @@
             (lambda-expand-symbol-bind (car clause) init)
             (list (car clause) init)))
         (cadr form)))
-    (map (pa$ loop 'stmt) (cddr form))))
+    (map (pa$ loop (if (eq? ctx 'toplevel) 'toplevel 'stmt)) (cddr form))))
 
 (define (lambda-expand-symbol-bind sym init)
   (when (and (vsymbol? sym) (list? init) (eq? (vexp (car init)) 'lambda))

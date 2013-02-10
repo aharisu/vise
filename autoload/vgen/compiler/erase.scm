@@ -32,7 +32,7 @@
       (erase-sym-bind (car clause) (cadr clause))
       (list (car clause) (loop 'expr (cadr clause))))
     (cadr form))
-  (for-each (pa$ loop 'stmt) (cddr form)))
+  (for-each (pa$ loop (if (eq? ctx 'toplevel) 'toplevel 'stmt)) (cddr form)))
 
 (define (decrement-ref-count exp)
   (cond
@@ -191,7 +191,7 @@
                         (erase-expression 'expr (car vars) (cadar vars)))
                       acc))))))
      ,@(filter-map
-         (erase-filter 'stmt form)
+         (erase-filter (if (eq? ctx 'toplevel) 'toplevel 'stmt) form)
          (cddr form))))
 
 (define (erase-array ctx parent form)
