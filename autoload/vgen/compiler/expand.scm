@@ -453,10 +453,10 @@
                   (pa$ expand-expression injection-env (if (eq? ctx 'toplevel) 'toplevel 'stmt) exp)
                   (cddr exp))))))]
     ;;named-let
-    [(let (? symbol? name) ((var . spec) ...) . body)
+    [(let (? symbol? name) ((var spec) ...) . body)
      (expand-expression env ctx parent
                         `(letrec ((,name (lambda ,var ,@body)))
-                           (,name ,@(map car spec))))]
+                           (,name ,@spec)))]
     [_ (vise-error "Bad let syntax\n\tRelated location:~a" exp)]))
 
 (define (expand-begin env ctx parent exp)
