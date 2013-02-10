@@ -1018,9 +1018,7 @@ viseではコンパイル段階で変数の参照回数などを解析してい�
  let s:debug = 0
 
  function! s:test()
-   if !s:debug
-     echomsg "not debugging"
-   endif
+   echomsg "not debugging"
  endfunction
 <
 vise上のdebugという変数にはリテラルで#fが設定されています。そして一度も再束縛
