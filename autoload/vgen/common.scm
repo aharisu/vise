@@ -20,11 +20,40 @@
 (define (is-function-call? exp)
   (and (list? exp) (not (eq? (car exp) 'quote))))
 
+(define (exp-is-literal? form)
+  (cond
+    [(list? form) 
+     (if (is-syntax-function? (car form))
+       (case (vexp (car form))
+         [(quote lambda) #t]
+         [(not)
+          (unless (eq? (length form) 2) 
+            (vise-error #`"Wrong number of arguments (required 2).\n\tRelated location:~a" form))
+          (exp-is-literal? (cadr form))]
+         [else #f])
+       #f)]
+    [(vsymbol? form) 
+     (if-let1 d (env-find-data form)
+       (if (vsymbol? (@ d.value))
+         (exp-is-literal? (@ d.value))
+         (not (eq? env-data-none-value (@ d.value))))
+       #f)]
+    [(symbol? form) #f]
+    [else #t]))
+
 (define (get-evaluated-exp e)
   (cond
-    [(and (list? e) (eq? (vexp (car e)) 'quote)
-       (not (symbol? (vexp (cadr e)))))
-     (cadr e)]
+    [(and (list? e) (exp-is-literal? e))
+     (case (vexp (car e))
+       [(quote)
+        (if (not (symbol? (vexp (cadr e))))
+          (cadr e)
+          e)]
+       [(not)
+        (if (null? (cdr e))
+          e
+          (or* eq? (get-evaluated-exp (cadr e)) #f 0))]
+       [else e])]
     [(vsymbol? e) 
      (let1 d (env-find-data e)
        (if (and d (not (eq? env-data-none-value (@ d.value))))
@@ -274,6 +303,11 @@
       (print "->")
       (loop (@ env.parent))))
   (newline))
+
+(define (is-syntax-function? sym)
+  (if-let1 d (env-find-data sym (if (vsymbol? sym) (@ sym.env) (toplevel-env)))
+    (eq? (@ d.scope) 'syntax)
+    #f))
 
 ;;
 ;;virtual output port

@@ -34,20 +34,13 @@
     (cadr form))
   (for-each (pa$ loop 'stmt) (cddr form)))
 
-(define (erase-is-literal? form)
+(define (decrement-ref-count exp)
   (cond
-    [(list? form) 
-     (case (vexp (car form))
-       [(quote lambda) #t]
-       [else #f])]
-    [(vsymbol? form) 
-     (if-let1 d (env-find-data form)
-       (if (vsymbol? (@ d.value))
-         (erase-is-literal? (@ d.value))
-         (not (eq? env-data-none-value (@ d.value))))
-       #f)]
-    [(symbol? form) #f]
-    [else #t]))
+    [(list? exp)
+     (for-each decrement-ref-count exp)]
+    [(vsymbol? exp) 
+     (if-let1 d (env-find-data exp)
+       (@dec! d.ref-count))]))
 
 (define (erase-sym-bind sym exp)
   (let1  d (and (vsymbol? sym) (env-find-data sym))
@@ -132,11 +125,10 @@
                     (erase-expression 'expr form (cadr form))
                     (erase-expression cctx form (caddr form))
                     (erase-expression cctx form (cadddr form))))))
-    (if (erase-is-literal? (cadr frm))
+    (if (exp-is-literal? (cadr frm))
       (mark-erase
         (begin
-          (if-let1 d (and (vsymbol? (cadr frm)) (env-find-data (cadr frm)))
-            (@dec! d.ref-count))
+          (decrement-ref-count (cadr frm))
           (if (or* eq? (get-evaluated-exp (cadr frm)) #f 0)
             (if (null? (cdddr frm)) exp-erased (cadddr frm)) ;;get else
             (caddr frm)))) ;;get then
@@ -191,7 +183,7 @@
           (reverse! acc)
           (let1 d (and (vsymbol? (caar vars)) (env-find-data (caar vars)))
             (loop (cdr vars)
-                  (if (and d (env-data-not-use? d) (erase-is-literal? (cadar vars)))
+                  (if (and d (env-data-not-use? d) (exp-is-literal? (cadar vars)))
                     (mark-erase acc) ;erase var decl
                     (cons 
                       (list
