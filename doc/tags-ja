@@ -116,6 +116,7 @@ vise-install	vise.jax	/*vise-install*
 vise-introduction	vise.jax	/*vise-introduction*
 vise-iteration	vise.jax	/*vise-iteration*
 vise-let-unpack	vise.jax	/*vise-let-unpack*
+vise-macro	vise.jax	/*vise-macro*
 vise-name-duplicate	vise.jax	/*vise-name-duplicate*
 vise-nested-scope	vise.jax	/*vise-nested-scope*
 vise-number	vise.jax	/*vise-number*
