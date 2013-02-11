@@ -31,6 +31,13 @@
     [(list? exp)
      (case (car exp)
        [(quote) exp]
+       [(eval-in-macro-module)
+        (unless (eq? ctx 'toplevel)
+          (vise-error "eval-in-macro-module can only be at top level.\n\tRelated location:~a" exp))
+        (for-each
+          (cut eval <> (vise-macro-module))
+          (cdr exp))
+        #f]
        [(defmacro) ;only top level context
         (unless (eq? ctx 'toplevel)
           (vise-error "defmacro can only be defined at top level.\n\tRelated location:~a" exp))
@@ -84,16 +91,15 @@
   (syntax-rules (match)
     ;; recursion
     [(_ env "clauses" op clauses (:where defs ...))
-     (env-add-symbol&exp env 'op 'macro 
-                         (make <vmacro>
-                               :exp (lambda (form) 
-                                      defs ...
-                                      (guard (e [(<error> e)
-                                                 (if (string-scan (slot-ref e 'message) "no matching clause for")
-                                                   (vise-error "no matching macro pattern clause.\n\tRelated location: ~a" form)
-                                                   (raise e))])
-                                        (match form . clauses)))
-                               :env env))]
+     (env-add-symbol&exp 
+       env 'op 'macro 
+       (make <vmacro>
+             :exp (eval 
+                    (quote (lambda (form) 
+                             defs ...
+                             (match form . clauses)))
+                    (vise-macro-module))
+             :env env))]
     [(_ env "clauses" op clauses ())
      (register-macro env "clauses" op clauses (:where))]
     [(_ env "clauses" op (clause ...) (x . y))
@@ -108,44 +114,49 @@
     [(_ env op arg . body)
      (expand-defmacro env 'op 'arg 'body)]))
 
-
-(define (check-lambda-for-list-fnction form proc . require-args)
-  (if (and (list? proc) (eq? (car proc) 'lambda))
-    (match proc
-      [(_ args . body)
-       (if (and (list? args) (any (pa$ = (length args)) require-args))
-         #t
-         (vise-error #`"Wrong number of arguments (required ,(string-join (map number->string require-args) \" or \")).\n\t Related location:~a\n\t\t~a" proc form))]
-      [else (vise-error "Bad syntax\n\tRelated location:~a\n\t\t~a" proc form)])
-    #f))
-
-(define (is-expand-lambda-body? proc)
-  (and (= 1 (length (cddr proc)))
-    (list? (caddr proc))
-    (not (or* eq? (caaddr proc)
-              'lambda 'if 'set! 'let 'let* 'letrec 'dolist 'while 'begin
-              'quasiquote 'unquote 'unquote-splicing 'list-func))))
-
-(define (replace-symbol sym-from sym-to body)
-  (cond
-    ((list? body) (map (pa$ replace-symbol sym-from sym-to) body))
-    ((symbol? body) (if (eq? sym-from body) sym-to body))
-    (else body)))
-
 (define (init-phase-expand env)
-  (define (expand-list-func type proc l)
-    (if (check-lambda-for-list-fnction `(,type ,proc ,l) proc 1 2)
-      (if (is-expand-lambda-body? proc)
-        `(list-func 
-           ,type ,l 
-           ,@(if (= 1 (length (cadr proc)))
-               (replace-symbol (caadr proc) 'v:val (cddr proc))
-               ((.$
-                  (pa$ replace-symbol (cadadr proc) 'v:val)
-                  (pa$ replace-symbol (caadr proc) 'v:key))
-                (cddr proc))))
-        `(list-func ,type ,l ,proc))
-      `(list-func ,type ,l (,proc v:val))))
+  (eval
+    '(begin
+       (define (%check-lambda-for-list-fnction% form proc . require-args)
+         (if (and (list? proc) (eq? (car proc) 'lambda))
+           (match proc
+             [(_ args . body)
+              (if (and (list? args) (any (pa$ = (length args)) require-args))
+                #t
+                (vise-error #`"Wrong number of arguments (required ,(string-join (map number->string require-args) \" or \")).\n\t Related location:~a\n\t\t~a" proc form))]
+             [else (vise-error "Bad syntax\n\tRelated location:~a\n\t\t~a" proc form)])
+           #f))
+
+       (define (%is-expand-lambda-body?% proc)
+         (and (= 1 (length (cddr proc)))
+           (list? (caddr proc))
+           (case (caaddr proc)
+                  [(lambda if set! let let* letrec dolist while begin
+                     quasiquote unquote unquote-splicing list-func)
+                   #f]
+                  [else #t])))
+
+       (define (%replace-symbol% sym-from sym-to body)
+         (cond
+           ((list? body) (map (pa$ %replace-symbol% sym-from sym-to) body))
+           ((symbol? body) (if (eq? sym-from body) sym-to body))
+           (else body)))
+
+       (define (%expand-list-func% type proc l)
+         (if (%check-lambda-for-list-fnction% `(,type ,proc ,l) proc 1 2)
+           (if (%is-expand-lambda-body?% proc)
+             `(list-func 
+                ,type ,l 
+                ,@(if (= 1 (length (cadr proc)))
+                    (%replace-symbol% (caadr proc) 'v:val (cddr proc))
+                    ((.$
+                       (pa$ %replace-symbol% (cadadr proc) 'v:val)
+                       (pa$ %replace-symbol% (caadr proc) 'v:key))
+                     (cddr proc))))
+             `(list-func ,type ,l ,proc))
+           `(list-func ,type ,l (,proc v:val))))
+       )
+    (vise-macro-module))
 
   ;;add global macro
   ;;cond
@@ -184,27 +195,27 @@
   (register-macro
     env
     (map proc l)
-    (expand-list-func :map proc l))
+    (%expand-list-func% :map proc l))
   ;;map!
   (register-macro
     env
     (map! proc l)
-    (expand-list-func :map! proc l))
+    (%expand-list-func% :map! proc l))
   ;;filter
   (register-macro
     env
     (filter proc l)
-    (expand-list-func :filter proc l))
+    (%expand-list-func% :filter proc l))
   ;;filter!
   (register-macro
     env
     (filter! proc l)
-    (expand-list-func :filter! proc l))
+    (%expand-list-func% :filter! proc l))
   ;;for-each
   (register-macro 
     env
     (for-each proc l)
-    (if (check-lambda-for-list-fnction `(for-each ,proc ,l) proc 1)
+    (if (%check-lambda-for-list-fnction% `(for-each ,proc ,l) proc 1)
       `(dolist (,(caadr proc) ,l) ,@(cddr proc))
       `(dolist (val ,l) (,proc val))))
   ;;length
@@ -532,7 +543,13 @@
   (let1 e (env-find-exp (car exp) env)
     (if (vmacro? e)
       ;;macro expand
-      (expand-expression env ctx parent ((@ e.exp) exp))
+      (expand-expression 
+        env ctx parent 
+        (guard (e [(<error> e)
+                   (if (string-scan (slot-ref e 'message) "no matching clause for")
+                     (vise-error "no matching macro pattern clause.\n\tRelated location: ~a" exp)
+                     (vise-error "error while evaluating macro:~a.\n\tRelated location: ~a" (slot-ref e 'message) exp))])
+          ((@ e.exp) exp)))
       ;;function call
       (rlet1 form (map (pa$ expand-expression env 'expr exp) exp)
         (when (is-a? (car form) <vexp>)

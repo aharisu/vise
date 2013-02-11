@@ -41,6 +41,16 @@
       (lambda (sym) (env-add-symbol env sym 'syntax))
       vim-symbol-list)))
 
+(define (make-vise-macro-module)
+  (rlet1 m (make-module #f)
+    (eval '(begin
+             (use util.match)
+             (use srfi-1) ;list
+             (use util.list)
+             (use srfi-13) ;string
+             (use vgen.common :only (vise-error))
+             )
+          m)))
 
 (define (vise-compile in-port 
                       :key (out-port (current-output-port))
@@ -48,7 +58,8 @@
                       (prologue "")
                       (epilogue ""))
   (let1 global-env (make-global-env)
-    (parameterize ([toplevel-env global-env])
+    (parameterize ([toplevel-env global-env]
+                   [vise-macro-module (make-vise-macro-module)])
       (let1 exp-list ((.$
                         vise-phase-render
                         vise-phase-erase
@@ -83,6 +94,7 @@
                        (pa$ vise-phase-expand global-env)
                        (pa$ vise-phase-include load-path (get-file-path in-port)))])
     (parameterize ([toplevel-env global-env]
+                   [vise-macro-module (make-vise-macro-module)]
                    [script-prefix "b:"])
       (letrec ((repl (lambda ()
                        (guard (e [(<vise-error> e) 

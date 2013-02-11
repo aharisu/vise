@@ -111,6 +111,8 @@
 
 (define-constant toplevel-env (make-parameter #f))
 
+(define-constant vise-macro-module (make-parameter #f))
+
 ;;;;;
 ;;refer data
 ;;@slot scope {@ 'arg 'script 'global 'cmd 'window 'buffer 'syntax}

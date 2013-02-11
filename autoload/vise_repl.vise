@@ -371,7 +371,8 @@
 (defun buf-enter ();{{{
   (save-updatetime)
   (set! b:lispwords &lispwords)
-  (set! &lispwords "lambda,and,or,if,cond,defun,defvar,defmacro,let,let*,letrec,begin,dolist,while,set!,else,quote,quasiquote,unquote,unquote-splicing,when,unless,dict,array,try,autocmd,augroup,let1,rlet1,if-let1"));}}}
+  (set! &lispwords "lambda,and,or,if,cond,defun,defvar,defmacro,let,let*,letrec,begin,dolist,while,set!,else,quote,quasiquote,unquote,unquote-splicing,when,dict,array,try,autocmd,augroup,let1,rlet1,if-let1,case,define,do,else,=>,quote,quasiquote,unquote,unquote-splicing,define-syntax,let-syntax,letrec-syntax,syntax-rules,and-let*,define-class,define-constant,define-generic,define-in-module,define-macro,define-method,include,receive,unless,when,$,$*,$<<,$do,$do*,$or,^,^.,^_,^a,^b,^c,^d,^e,^f,^g,^h,^i,^j,^k,^l,^m,^n,^o,^p,^q,^r,^s,^t,^u,^w,^v,^x,^y,^z,begin0,case-lambda,cut,cute,dec!,define-^x,define-values,dolist,dotimes,get-keyword*,get-optional,guard,inc!,let*-values,let-args,let-keywords,let-keywords*,let-optionals*,let-string-start+end,let-values,let/cc,let1,match,match-define,match-lambda,match-lambda*,match-let,match-let*,match-let1,match-letrec,pop!,program,push!,rec,require-extension,reset,rlet1,rxmatch-case,rxmatch-cond,rxmatch-if,rxmatch-let,set!-values,shift,test*,until,unwind-protect,update!,values-ref,while,with-builder"));}}}
+
 
 (defun buf-leave ();{{{
   (restore-updatetime)

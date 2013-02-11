@@ -53,6 +53,7 @@ echomsg	vise.jax	/*echomsg*
 echon	vise.jax	/*echon*
 edit	vise.jax	/*edit*
 enew	vise.jax	/*enew*
+eval-in-macro-module	vise.jax	/*eval-in-macro-module*
 execute	vise.jax	/*execute*
 finish	vise.jax	/*finish*
 for-each	vise.jax	/*for-each*
@@ -119,6 +120,7 @@ vise-name-duplicate	vise.jax	/*vise-name-duplicate*
 vise-nested-scope	vise.jax	/*vise-nested-scope*
 vise-number	vise.jax	/*vise-number*
 vise-operators	vise.jax	/*vise-operators*
+vise-other-functions	vise.jax	/*vise-other-functions*
 vise-procedures	vise.jax	/*vise-procedures*
 vise-repl	vise.jax	/*vise-repl*
 vise-repl-commands	vise.jax	/*vise-repl-commands*

@@ -30,6 +30,7 @@ Syntax                |vise-syntax|
   Types                |vise-types|
   Functions            |vise-functions|
   Operators            |vise-operators|
+  Others               |vise-other-functions|
 Tips                  |vise-tips|
 REPL                  |vise-repl| 
   Commands             |vise-commands|
@@ -859,6 +860,32 @@ VimScript上の関数と同じです。
 autoload/vgenディレクトリにあるvim-function.scmファイルに関数名を一行足してく
 ださい。そうすれば使えるようになります。
 
+
+OTHERS:						*vise-other-functions*
+----------
+
+* eval-in-macro-module - toplevel		*eval-in-macro-module*
+Syntax:
+ (eval-in-macro-module {expr} ...)
+	eval-in-macro-moduleは各{expr}を|defmacro|のbody式が実行されるモジュー
+	ル内で実行します。
+	つまり、{expr}はviseの式ではなくGaucheの式を記述しなければなりません。
+
+	この関数は|defmacro|の実行モジュールに対してGaucheのユーティリティ関数
+	などを定義するために利用できます。
+>
+ (eval-in-macro-module
+   ;;以下の式はGaucheの式として評価されます
+   (define (symbols-in-macro-module)
+     (string-join (map x->string 
+                       (hash-table-keys (module-table (current-module)))))))
+
+ ;;通常のvise式
+ (defmacro test ()
+   (symbols-in-macro-module))
+
+ (echo (test))
+<
 
 ==============================================================================
 TIPS						*vise-tips*

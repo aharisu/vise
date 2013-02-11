@@ -75,6 +75,9 @@ function! s:buf_enter()
     set lispwords+=when,unless
     set lispwords+=dict,array,try,autocmd,augroup
     set lispwords+=let1,rlet1,if-let1
+
+    "gauche word
+    set lispwords+=case,define,do,=>,define-syntax,let-syntax,letrec-syntax,syntax-rules,and-let*,define-class,define-constant,define-generic,define-in-module,define-macro,define-method,include,receive,$,$*,$<<,$do,$do*,$or,^,^.,^_,^a,^b,^c,^d,^e,^f,^g,^h,^i,^j,^k,^l,^m,^n,^o,^p,^q,^r,^s,^t,^u,^w,^v,^x,^y,^z,begin0,case-lambda,cut,cute,dec!,define-^x,define-values,dotimes,get-keyword*,get-optional,guard,inc!,let*-values,let-args,let-keywords,let-keywords*,let-optionals*,let-string-start+end,let-values,let/cc,match,match-define,match-lambda,match-lambda*,match-let,match-let*,match-let1,match-letrec,pop!,program,push!,rec,require-extension,reset,rxmatch-case,rxmatch-cond,rxmatch-if,rxmatch-let,set!-values,shift,test*,until,unwind-protect,update!,values-ref,with-builder
   endif
 endfunction
 
