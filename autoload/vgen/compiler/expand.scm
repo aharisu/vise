@@ -235,10 +235,10 @@
     (match
       [(_ sym expr then else)
        `(let1 ,sym ,expr
-          (if ,sym ,then ,else))]
+          (if (isnot ,sym 0) ,then ,else))]
       [(_ sym expr then)
        `(let1 ,sym ,expr
-          (if ,sym ,then))]))
+          (if (isnot ,sym 0) ,then))]))
   ;;rlet1
   (register-macro
     env
