@@ -81,8 +81,10 @@
       (has-attr? d 'free)
       (not (env-data-ref-only? d)))))
 
-(define (vim-function-ref func-name)
-  #`"function(,(get-sid-prefix-symbol)() . ',(remove-symbol-prefix func-name)')")
+(define (vim-function-ref func-name :optional (d #f))
+  (if (and d (not (eq? (@ d.scope) 'script)))
+    #`"function(',func-name')"
+    #`"function(,(get-sid-prefix-symbol)() . ',(remove-symbol-prefix func-name)')"))
 
 (define-macro (define-syntax-function-ref op . body)
   `(hash-table-put! syntax-function-ref-table ,op
@@ -110,9 +112,9 @@
       $ (lambda (sym)
           (cond
             [(and d (has-attr? d 'function) (not (has-attr? symbol 'function-call)))
-             (vim-function-ref sym)]
+             (vim-function-ref sym d)]
             [(and d (eq? (@ d.scope) 'syntax) (not (has-attr? symbol 'function-call)))
-             (vim-function-ref ((hash-table-get syntax-function-ref-table (vexp symbol))))]
+             (vim-function-ref ((hash-table-get syntax-function-ref-table (vexp symbol))) d)]
             [else sym]))
       $ (lambda (sym)
           (if (has-attr? symbol 'self-recursion)
