@@ -83,30 +83,9 @@ viseでは末尾再帰最適化を行います。
     などなど
 
 ## コンパイル方法
-以下のスクリプトを.vimrcなどに定義すると簡単にコンパイルを行えます。
+viseファイルを開き以下を実行して下さい。
 
-    "※注)このパスは実際にgenvise.scmが存在するフルパスを記述してください。
-    let s:genvise_path = '... /autoload/genvise.scm'
-
-    function! s:genvise()
-      echo "generating VimScript ..."
-    
-      let srcfile = expand('%:p')
-      let outfile = expand('%:p:r') . '.vim'
-      let ret =  system('gosh ' . s:genvise_path . ' -o ' . outfile . ' ' . srcfile)
-      if v:shell_error
-        echohl Error
-        for line in split(ret, '\n')
-          echomsg substitute(line, '\t', '  ', 'g')
-        endfor
-        echohl None
-      else
-        echo "finish."
-      endif
-    endfunction
-
-    command! -nargs=0 Genvise :call s:genvise()
-
+    :Genvise
 
 Vimプラグインのvim-quickrunがインストールされている場合は設定を加えることで、
 より簡単にコンパイル結果を確かめることができます。
