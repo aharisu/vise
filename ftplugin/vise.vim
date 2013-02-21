@@ -8,7 +8,6 @@ function! s:genvise()
   let srcfile = expand('%:p')
   let outfile = expand('%:p:r') . '.vim'
   let genvise = globpath(&rtp, 'autoload/genvise.scm')
-  let g:hoge = 'gosh ' . shellescape(genvise) . ' -o ' . shellescape(outfile) . ' ' . shellescape(srcfile)
   let ret =  system('gosh ' . shellescape(genvise) . ' -o ' . shellescape(outfile) . ' ' . shellescape(srcfile))
   if v:shell_error
     echohl Error

@@ -93,7 +93,7 @@ Vimプラグインのvim-quickrunがインストールされている場合は�
     let g:quickrun_config = {
     \  'vise' : {
     \    'command': 'gosh',
-    \    'exec': '%c ' . s:genvise_path . ' %s',
+    \    'exec': '%c ' . shellescape(globpath(&rtp, 'autoload/genvise.scm')) . ' %s',
     \    'outputter/buffer/filetype': 'vim',
     \  },
     \}
